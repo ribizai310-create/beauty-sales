@@ -280,12 +280,12 @@ tr:hover td{background:var(--cream);}
   <div class="card">
     <div class="card-title">👤 顧客台帳</div>
     <div style="display:flex;gap:8px;margin-bottom:10px;">
-      <input type="text" id="custSearch" placeholder="顧客名・電話で検索..." oninput="renderCustomers()" style="flex:1;">
+      <input type="text" id="custSearch" placeholder="顧客名・電話・メニューキーで検索..." oninput="renderCustomers()" style="flex:1;">
       <button class="btn btn-primary" onclick="openCustomerModal()">＋ 新規</button>
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>顧客名</th><th>電話</th><th>メール</th><th>締め日</th><th>売掛残</th><th>操作</th></tr></thead>
+        <thead><tr><th>コード</th><th>顧客名</th><th>電話</th><th>締め日</th><th>売掛残</th><th>操作</th></tr></thead>
         <tbody id="customerTable"></tbody>
       </table>
     </div>
@@ -1081,7 +1081,13 @@ tr:hover td{background:var(--cream);}
           </select>
         </div>
       </div>
-      <div class="form-group"><label>備考・訪問メモ</label><textarea id="custMemo" rows="2"></textarea></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>メニューキー <span style="font-size:10px;color:var(--muted);">（よみがな・通称など）</span></label>
+          <input type="text" id="custMenuKey" placeholder="例：アール・ブルーム・きよし">
+        </div>
+        <div class="form-group"><label>備考・訪問メモ</label><textarea id="custMemo" rows="2"></textarea></div>
+      </div>
       <div class="form-group">
         <label>📨 請求書 送付方法</label>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;" id="custSendMethodGroup">
@@ -1787,14 +1793,18 @@ function custSearchBlur(fieldId){
 function custSearchRender(fieldId, q){
   const drop=document.getElementById('drop_'+fieldId);
   const custs=DB.get('customers');
+  const qn=normalizeKana(q);
   const filtered=q
-    ? custs.filter(c=>
-        (c.name||'').toLowerCase().includes(q)||
-        (c.code||'').toLowerCase().includes(q)||
-        (c.tel||'').toLowerCase().includes(q)||
-        (c.contact||'').toLowerCase().includes(q)||
-        (c.addr||'').toLowerCase().includes(q)
-      )
+    ? custs.filter(c=>{
+        const name=normalizeKana(c.name);
+        const menuKey=normalizeKana(c.menuKey||'');
+        return name.includes(qn)||
+          (c.code||'').toLowerCase().includes(q)||
+          (c.tel||'').toLowerCase().includes(q)||
+          (c.contact||'').toLowerCase().includes(q)||
+          (c.addr||'').toLowerCase().includes(q)||
+          (menuKey&&menuKey.startsWith(qn));
+      })
     : custs;
   if(!filtered.length){
     drop.innerHTML='<div class="cust-search-item"><span class="cust-sub">該当する顧客がいません</span></div>';
@@ -1896,20 +1906,51 @@ function renderDashboard(){
 // =============================================
 // CUSTOMERS
 // =============================================
+// カタカナ・ひらがな・半角カナを全角カタカナに正規化
+function normalizeKana(str){
+  if(!str) return '';
+  // 半角カナ→全角カナ
+  let s=str.replace(/[ｦ-ﾟ]/g,c=>{
+    const h='ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝﾞﾟ';
+    const f='ヲァィゥェォャュョッーアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンﾞﾟ';
+    const i=h.indexOf(c);return i>=0?f[i]:c;
+  });
+  // ひらがな→カタカナ
+  s=s.replace(/[ぁ-ん]/g,c=>String.fromCharCode(c.charCodeAt(0)+0x60));
+  return s.toLowerCase();
+}
+
 function renderCustomers(){
-  const q=(document.getElementById('custSearch')?.value||'').toLowerCase();
+  const q=normalizeKana(document.getElementById('custSearch')?.value||'');
   const dels=DB.get('deliveries'),pays=DB.get('payments');
-  document.getElementById('customerTable').innerHTML=DB.get('customers')
-    .filter(c=>c.name.toLowerCase().includes(q)||(c.tel||'').includes(q)||(c.email||'').toLowerCase().includes(q))
+  // コード順ソート（数字のみの場合は数値比較）
+  const sorted=[...DB.get('customers')].sort((a,b)=>{
+    const ca=a.code||'',cb=b.code||'';
+    const na=parseInt(ca),nb=parseInt(cb);
+    if(!isNaN(na)&&!isNaN(nb)) return na-nb;
+    return ca.localeCompare(cb,'ja');
+  });
+  document.getElementById('customerTable').innerHTML=sorted
+    .filter(c=>{
+      if(!q) return true;
+      const name=normalizeKana(c.name);
+      const tel=(c.tel||'').toLowerCase();
+      const email=(c.email||'').toLowerCase();
+      const menuKey=normalizeKana(c.menuKey||'');
+      const code=(c.code||'').toLowerCase();
+      // メニューキーは前方一致、その他は部分一致
+      return name.includes(q)||tel.includes(q)||email.includes(q)||code.includes(q)||
+             (menuKey&&menuKey.startsWith(q));
+    })
     .map(c=>{
       const s=dels.filter(d=>d.customerId==c.id&&!d.voided&&!isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
       const r=dels.filter(d=>d.customerId==c.id&&!d.voided&&isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
       const p=pays.filter(p=>p.customerId==c.id&&!p.voided).reduce((x,p)=>x+p.amount,0);
       const ar=s-r-p;
       return`<tr>
-        <td><strong>${c.name}</strong><br><span class="text-sm">${c.addr||''}</span></td>
+        <td><span class="text-sm" style="font-family:monospace;">${c.code||'—'}</span></td>
+        <td><strong>${c.name}</strong>${c.menuKey?`<br><span class="text-sm" style="color:var(--muted);">🔑${c.menuKey}</span>`:''}</td>
         <td>${c.tel||''}</td>
-        <td>${c.email?`<a href="mailto:${c.email}" style="color:var(--info);font-size:11px;">${c.email}</a>`:''}</td>
         <td>${c.closeDay}締め<br><span class="text-sm">${c.payTerm}</span></td>
         <td class="text-right"><span class="${ar>0?'color-accent fw-bold':''}">${fmt(ar)}</span></td>
         <td style="white-space:nowrap;">
@@ -1922,7 +1963,7 @@ function renderCustomers(){
 function openCustomerModal(){
   document.getElementById('custId').value='';
   document.getElementById('custModalTitle').textContent='顧客登録';
-  ['custName','custCode','custAddr','custTel','custEmail','custFax','custContact','custMemo'].forEach(id=>{
+  ['custName','custCode','custAddr','custTel','custEmail','custFax','custContact','custMenuKey','custMemo'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   document.getElementById('custCloseDay').value='末日';
@@ -1942,6 +1983,7 @@ function editCustomer(id){
   document.getElementById('custFax').value=c.fax||'';
   document.getElementById('custContact').value=c.contact||'';
   document.getElementById('custMemo').value=c.memo||'';
+  if(document.getElementById('custMenuKey')) document.getElementById('custMenuKey').value=c.menuKey||'';
   document.getElementById('custCloseDay').value=c.closeDay||'末日';
   document.getElementById('custPayTerm').value=c.payTerm||'翌月末';
   setSendMethods(c.sendMethods||['print']);
@@ -1959,6 +2001,7 @@ function saveCustomer(){
     fax:(document.getElementById('custFax')?.value||''),contact:document.getElementById('custContact').value,
     closeDay:document.getElementById('custCloseDay').value,payTerm:document.getElementById('custPayTerm').value,
     memo:document.getElementById('custMemo').value,
+    menuKey:(document.getElementById('custMenuKey')?.value||''),
     sendMethods:getSendMethods(),
     lineId:(document.getElementById('custLineId')?.value||''),
   };
