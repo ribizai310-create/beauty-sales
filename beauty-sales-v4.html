@@ -938,6 +938,61 @@ tr:hover td{background:var(--cream);}
     <div id="autoBackupList" style="margin-bottom:8px;"></div>
     <button class="btn btn-outline btn-sm" onclick="renderAutoBackupList()">🔄 一覧を更新</button>
   </div>
+  <!-- ===== 旧システム移行データ入力 ===== -->
+  <div class="card" id="migrationCard">
+    <div class="card-title">📦 旧システムからの移行データ入力</div>
+    <div class="alert alert-info" style="font-size:11px;margin-bottom:12px;">
+      旧システムの締め日ごとの売掛残高を登録します。各タブの基準日は締め日に合わせて自動設定されます。<br>
+      登録した残高は回収予定表・請求書の「前回請求額（繰越）」に自動反映されます。
+    </div>
+
+    <!-- 締め日タブ -->
+    <div class="inner-tabs" style="margin-bottom:14px;">
+      <div class="inner-tab active" id="migTab_末日" onclick="switchMigTab('末日')">📅 末日締め<br><span style="font-size:9px;">基準日：12/31</span></div>
+      <div class="inner-tab" id="migTab_20" onclick="switchMigTab('20')">📅 20日締め<br><span style="font-size:9px;">基準日：12/20</span></div>
+      <div class="inner-tab" id="migTab_25" onclick="switchMigTab('25')">📅 25日締め<br><span style="font-size:9px;">基準日：12/25</span></div>
+    </div>
+
+    <!-- 現在の締め日・基準日表示 -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="font-size:12px;color:var(--muted);">残高基準日：<strong id="migBaseDateLabel" style="color:var(--navy,#1a1a2e);font-size:14px;">2025年12月31日</strong></div>
+      <input type="hidden" id="migrationBaseDate" value="2025-12-31">
+      <input type="hidden" id="migCurrentCloseDay" value="末日">
+      <button class="btn btn-outline btn-sm" onclick="renderMigrationTable()">🔄 一覧を更新</button>
+    </div>
+
+    <!-- テーブル -->
+    <div id="migrationTableWrap">
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr style="background:var(--deep);color:white;">
+              <th style="min-width:160px;">顧客名</th>
+              <th style="min-width:80px;">支払サイト</th>
+              <th class="r" style="min-width:140px;">売掛残高（繰越額）<br><span style="font-size:9px;font-weight:400;">旧システムの残高を入力</span></th>
+              <th class="r" style="min-width:100px;">登録済み残高</th>
+            </tr>
+          </thead>
+          <tbody id="migrationTableBody"></tbody>
+        </table>
+      </div>
+      <div id="migNoCustomer" class="empty-state" style="display:none;padding:20px;">
+        <div class="icon">👤</div>この締め日の顧客がいません
+      </div>
+      <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:11px;color:var(--muted);">※ 残高がない顧客は空欄のままでOKです</div>
+        <button class="btn btn-primary" onclick="saveMigrationData()">💾 この締め日の残高を保存</button>
+      </div>
+      <div id="migrationSaveMsg" style="display:none;margin-top:8px;" class="alert alert-success"></div>
+    </div>
+
+    <!-- 全体サマリー -->
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">📊 登録済み移行残高サマリー</div>
+      <div id="migSummary" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title">🏢 使用会社切替</div>
     <div class="co-selector">
@@ -1554,6 +1609,8 @@ document.addEventListener('DOMContentLoaded',()=>{ autoBackupOnStartup(); render
   const ym = today.substring(0,7);
   ['delDate','payDate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today;});
   document.getElementById('dailyDate').value = today;
+  // 移行データ入力：初期表示
+  setTimeout(()=>{ if(document.getElementById('migrationTableBody')) renderMigrationTable(); },100);
   document.getElementById('headerDate').textContent = fmtDateJP(today);
   document.getElementById('invMonth').value = ym;
   document.getElementById('bulkMonth').value = ym;
@@ -2664,14 +2721,149 @@ function loadInvoice(){
 
 function renderARSummary(){
   const dels=DB.get('deliveries'),pays=DB.get('payments');
+  const migBalances=DB.get('migrationBalances');
   document.getElementById('arSummaryTable').innerHTML=DB.get('customers').map(c=>{
     const s=dels.filter(d=>d.customerId==c.id&&!d.voided&&!isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
     const r=dels.filter(d=>d.customerId==c.id&&!d.voided&&isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
     const p=pays.filter(p=>p.customerId==c.id&&!p.voided).reduce((x,p)=>x+p.amount,0);
-    const ar=s-r-p;
+    const migBal=migBalances.find(m=>m.customerId==c.id);
+    const migAmt=migBal?(migBal.amount||0):0;
+    const ar=s-r-p+migAmt;
     const badge=ar===0?'<span class="badge badge-green">精算済</span>':ar>50000?'<span class="badge badge-red">要確認</span>':'<span class="badge badge-gold">未収あり</span>';
     return`<tr><td><strong>${c.name}</strong></td><td class="text-right">${fmt(s)}</td><td class="text-right color-success">${fmt(p)}</td><td class="text-right fw-bold ${ar>0?'color-accent':''}">${fmt(ar)}</td><td>${badge}</td></tr>`;
   }).join('');
+}
+
+// =============================================
+// 旧システム移行データ入力
+// =============================================
+// 締め日タブの基準日マップ
+const MIG_BASE_DATES = { '末日':'2025-12-31', '20':'2025-12-20', '25':'2025-12-25' };
+const MIG_BASE_LABELS = { '末日':'2025年12月31日', '20':'2025年12月20日', '25':'2025年12月25日' };
+
+function switchMigTab(closeDay){
+  // タブ切替
+  ['末日','20','25'].forEach(d=>{
+    const t=document.getElementById('migTab_'+d);
+    if(t) t.className='inner-tab'+(d===closeDay?' active':'');
+  });
+  // 基準日を自動設定
+  document.getElementById('migrationBaseDate').value = MIG_BASE_DATES[closeDay];
+  document.getElementById('migCurrentCloseDay').value = closeDay;
+  document.getElementById('migBaseDateLabel').textContent = MIG_BASE_LABELS[closeDay];
+  renderMigrationTable();
+}
+
+function renderMigrationTable(){
+  const closeDay=document.getElementById('migCurrentCloseDay')?.value||'末日';
+  const baseDate=MIG_BASE_DATES[closeDay];
+  const custs=DB.get('customers').filter(c=>c.closeDay===closeDay);
+  const migBalances=DB.get('migrationBalances');
+  const tbody=document.getElementById('migrationTableBody');
+  const noEl=document.getElementById('migNoCustomer');
+
+  if(!custs.length){
+    tbody.innerHTML='';
+    if(noEl) noEl.style.display='flex';
+    renderMigSummary();
+    return;
+  }
+  if(noEl) noEl.style.display='none';
+
+  let totalNew=0, totalExisting=0;
+  tbody.innerHTML=custs.map(c=>{
+    const existing=migBalances.find(m=>m.customerId==c.id);
+    const existingAmt=existing?(existing.amount||0):0;
+    totalExisting+=existingAmt;
+    return`<tr>
+      <td><strong>${c.name}</strong><br><span class="text-sm">${c.closeDay}締め</span></td>
+      <td>${c.payTerm||'翌月末'}</td>
+      <td class="r">
+        <input type="number" id="migAmt_${c.id}" value="${existingAmt||''}"
+          placeholder="0" min="0" step="1"
+          style="width:140px;text-align:right;font-size:15px;padding:8px 10px;border:2px solid var(--border);border-radius:8px;font-family:monospace;"
+          oninput="updateMigTotal()"
+          onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'">
+      </td>
+      <td class="r">
+        <span style="color:${existingAmt>0?'var(--accent)':'var(--muted)'};">
+          ${existingAmt>0?fmt(existingAmt):'－'}
+        </span>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // 合計行
+  tbody.innerHTML+=`<tr style="background:#f5f0e8;font-weight:700;">
+    <td colspan="2">合　計</td>
+    <td class="r" id="migTotalNew" style="font-size:15px;">¥0</td>
+    <td class="r">${fmt(totalExisting)}</td>
+  </tr>`;
+
+  document.getElementById('migrationSaveMsg').style.display='none';
+  updateMigTotal();
+  renderMigSummary();
+}
+
+function updateMigTotal(){
+  const closeDay=document.getElementById('migCurrentCloseDay')?.value||'末日';
+  const custs=DB.get('customers').filter(c=>c.closeDay===closeDay);
+  let total=0;
+  custs.forEach(c=>{
+    const inp=document.getElementById('migAmt_'+c.id);
+    if(inp) total+=parseFloat(inp.value)||0;
+  });
+  const el=document.getElementById('migTotalNew');
+  if(el) el.textContent=fmt(total);
+}
+
+function renderMigSummary(){
+  const migBalances=DB.get('migrationBalances');
+  const el=document.getElementById('migSummary');
+  if(!el) return;
+  const groups={'末日':'末日締め','20':'20日締め','25':'25日締め'};
+  el.innerHTML=Object.entries(groups).map(([day,label])=>{
+    const custs=DB.get('customers').filter(c=>c.closeDay===day);
+    const total=custs.reduce((s,c)=>{
+      const m=migBalances.find(x=>x.customerId==c.id);
+      return s+(m?m.amount||0:0);
+    },0);
+    const registered=custs.filter(c=>migBalances.find(x=>x.customerId==c.id&&x.amount>0)).length;
+    return`<div style="border:1px solid var(--border);border-radius:8px;padding:8px 14px;min-width:110px;text-align:center;background:${total>0?'#f0f7ff':'var(--paper)'};">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:2px;">${label}</div>
+      <div style="font-size:14px;font-weight:700;color:${total>0?'var(--accent)':'var(--muted)'};">${fmt(total)}</div>
+      <div style="font-size:10px;color:var(--muted);">${registered}/${custs.length}社 登録済</div>
+    </div>`;
+  }).join('');
+}
+
+function saveMigrationData(){
+  const closeDay=document.getElementById('migCurrentCloseDay')?.value||'末日';
+  const baseDate=MIG_BASE_DATES[closeDay];
+  const custs=DB.get('customers').filter(c=>c.closeDay===closeDay);
+  if(!custs.length){ alert('この締め日の顧客がいません'); return; }
+
+  // 既存データから今回の締め日以外を保持、今回分を上書き
+  const existing=DB.get('migrationBalances').filter(m=>{
+    const c=DB.get('customers').find(x=>x.id==m.customerId);
+    return c&&c.closeDay!==closeDay;
+  });
+  const newEntries=[];
+  custs.forEach(c=>{
+    const inp=document.getElementById('migAmt_'+c.id);
+    const amount=parseFloat(inp?.value)||0;
+    if(amount>0){
+      newEntries.push({customerId:c.id,customerName:c.name,amount,baseDate,closeDay});
+    }
+  });
+  DB.set('migrationBalances',[...existing,...newEntries]);
+
+  const msg=document.getElementById('migrationSaveMsg');
+  const label={'末日':'末日締め','20':'20日締め','25':'25日締め'}[closeDay];
+  msg.textContent=`✅ ${label}（基準日：${MIG_BASE_LABELS[closeDay]}）の移行残高を保存しました！`;
+  msg.style.display='block';
+  renderMigrationTable();
+  setTimeout(()=>{ msg.style.display='none'; },4000);
 }
 
 // =============================================
@@ -2725,11 +2917,15 @@ function renderCollectTable(){
     let hasData=false;
 
     groupCusts.forEach(c=>{
-      // ── 前回請求額: 前期以前の売上 - 前期以前の入金（= 前期繰越残高）
+      // ── 前回請求額: 前期以前の売上 - 前期以前の入金（= 前期繰越残高）＋移行残高
       const prevSales=dels.filter(d=>d.customerId==c.id&&d.date<=prevToStr&&!d.voided&&!isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
       const prevRets =dels.filter(d=>d.customerId==c.id&&d.date<=prevToStr&&!d.voided&& isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
       const prevPaid =pays.filter(p=>p.customerId==c.id&&p.date<=prevToStr&&!p.voided).reduce((s,p)=>s+(p.amount||0),0);
-      const prevBill = prevSales - prevRets - prevPaid;  // 前回請求額（繰越元）
+      // 移行残高（旧システムからの繰越）：基準日以前のデータのみ加算
+      const migBalances=DB.get('migrationBalances');
+      const migBal=migBalances.find(m=>m.customerId==c.id);
+      const migAmount=(migBal&&migBal.baseDate<=prevToStr)?(migBal.amount||0):0;
+      const prevBill = prevSales - prevRets - prevPaid + migAmount;  // 前回請求額（繰越元）
 
       // ── 当期入金額（期間内）
       const payment=pays.filter(p=>p.customerId==c.id&&p.date>=period.from&&p.date<=period.to&&!p.voided).reduce((s,p)=>s+(p.amount||0),0);
@@ -3501,7 +3697,11 @@ function genInvoiceDoc(data,co,forcePrintMode){
   const prevSales=prevDels.filter(d=>!isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
   const prevRets =prevDels.filter(d=> isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
   const prevPaid =prevPays.reduce((s,p)=>s+(p.amount||0)+(p.discount||0),0);
-  const carryOver=prevSales-prevRets-prevPaid;  // 繰越金額
+  // 移行残高（旧システムからの繰越）
+  const _migBals=DB.get('migrationBalances');
+  const _migBal=_migBals.find(m=>m.customerId==custId);
+  const _migAmt=(_migBal&&_migBal.baseDate<ym+'-01')?(_migBal.amount||0):0;
+  const carryOver=prevSales-prevRets-prevPaid+_migAmt;  // 繰越金額（移行残高含む）
 
   // 前回請求額（前月発行分 ≒ 前月繰越より前の売上合計）
   const prevMonthSales=prevDels.filter(d=>!isReturnType(d.saleType)&&d.date>=prevYm+'-01'&&d.date<ym+'-01').reduce((s,d)=>s+d.total,0);
