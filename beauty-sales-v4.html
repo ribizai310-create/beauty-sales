@@ -177,6 +177,18 @@ tr:hover td{background:var(--cream);}
 .co-tab{flex:1;text-align:center;padding:8px;border:2px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;transition:all .2s;}
 .co-tab.active{border-color:var(--gold);background:rgba(201,169,110,.1);color:var(--ink);font-weight:600;}
 
+/* 顧客検索コンボボックス */
+.cust-search-wrap{position:relative;}
+.cust-search-input{width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;font-family:'Noto Sans JP',sans-serif;background:white;box-sizing:border-box;}
+.cust-search-input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,169,110,.2);}
+.cust-search-dropdown{position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.12);}
+.cust-search-item{padding:9px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;}
+.cust-search-item:hover,.cust-search-item.selected{background:var(--cream);}
+.cust-search-item .cust-name{font-weight:700;color:var(--ink);}
+.cust-search-item .cust-sub{font-size:10px;color:var(--muted);}
+.cust-search-selected{background:#f0f7f0;border-color:#2d9e5f;}
+.cust-search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 4px;line-height:1;}
+
 /* 回収予定表 */
 .collect-table th,.collect-table td{font-size:11.5px;}
 .collect-overdue td{background:#fff8f8;}
@@ -378,9 +390,15 @@ tr:hover td{background:var(--cream);}
         <label>日付</label>
         <input type="date" id="delDate">
       </div>
-      <div class="form-group">
+      <div class="form-group" style="grid-column:span 2;">
         <label>顧客</label>
-        <select id="delCustomer"><option value="">-- 顧客選択 --</option></select>
+        <div class="cust-search-wrap" id="wrap_delCustomer">
+          <input type="text" class="cust-search-input" id="search_delCustomer" placeholder="🔍 顧客名・コード・電話で検索" autocomplete="off"
+            oninput="custSearchInput('delCustomer')" onfocus="custSearchFocus('delCustomer')" onblur="custSearchBlur('delCustomer')">
+          <button class="cust-search-clear" id="clear_delCustomer" onclick="custSearchClear('delCustomer')" style="display:none;">✕</button>
+          <div class="cust-search-dropdown" id="drop_delCustomer" style="display:none;"></div>
+          <input type="hidden" id="delCustomer">
+        </div>
       </div>
       <div class="form-group">
         <label>売上種別</label>
@@ -459,7 +477,14 @@ tr:hover td{background:var(--cream);}
     <div class="card-title">💴 入金処理</div>
     <div class="form-row">
       <div class="form-group"><label>日付</label><input type="date" id="payDate"></div>
-      <div class="form-group"><label>顧客</label><select id="payCustomer" onchange="loadAR()"><option value="">-- 顧客選択 --</option></select></div>
+      <div class="form-group"><label>顧客</label>
+        <div class="cust-search-wrap" id="wrap_payCustomer">
+          <input type="text" class="cust-search-input" id="search_payCustomer" placeholder="🔍 顧客名・コード・電話で検索" autocomplete="off"
+            oninput="custSearchInput('payCustomer')" onfocus="custSearchFocus('payCustomer')" onblur="custSearchBlur('payCustomer')">
+          <button class="cust-search-clear" id="clear_payCustomer" onclick="custSearchClear('payCustomer')" style="display:none;">✕</button>
+          <div class="cust-search-dropdown" id="drop_payCustomer" style="display:none;"></div>
+          <input type="hidden" id="payCustomer">
+        </div></div>
     </div>
     <div id="arInfo" style="display:none;" class="alert alert-warn">
       売掛残高: <strong id="arBalance">¥0</strong>
@@ -514,7 +539,14 @@ tr:hover td{background:var(--cream);}
     <div class="card-title">📝 見積書作成</div>
     <div class="form-row-4">
       <div class="form-group"><label>日付</label><input type="date" id="estDate"></div>
-      <div class="form-group"><label>顧客</label><select id="estCustomer"><option value="">-- 顧客選択 --</option></select></div>
+      <div class="form-group" style="grid-column:span 2;"><label>顧客</label>
+        <div class="cust-search-wrap" id="wrap_estCustomer">
+          <input type="text" class="cust-search-input" id="search_estCustomer" placeholder="🔍 顧客名・コード・電話で検索" autocomplete="off"
+            oninput="custSearchInput('estCustomer')" onfocus="custSearchFocus('estCustomer')" onblur="custSearchBlur('estCustomer')">
+          <button class="cust-search-clear" id="clear_estCustomer" onclick="custSearchClear('estCustomer')" style="display:none;">✕</button>
+          <div class="cust-search-dropdown" id="drop_estCustomer" style="display:none;"></div>
+          <input type="hidden" id="estCustomer">
+        </div></div>
       <div class="form-group"><label>有効期限</label><input type="date" id="estExpiry"></div>
       <div class="form-group"><label>件名</label><input type="text" id="estTitle" placeholder="シャンプー等 商品御見積"></div>
     </div>
@@ -658,7 +690,14 @@ tr:hover td{background:var(--cream);}
     <div class="card">
       <div class="card-title">📄 顧客個別 請求書</div>
       <div class="form-row">
-        <div class="form-group"><label>顧客</label><select id="invCustomer" onchange="loadInvoice()"><option value="">-- 顧客選択 --</option></select></div>
+        <div class="form-group"><label>顧客</label>
+          <div class="cust-search-wrap" id="wrap_invCustomer">
+            <input type="text" class="cust-search-input" id="search_invCustomer" placeholder="🔍 顧客名・コード・電話で検索" autocomplete="off"
+              oninput="custSearchInput('invCustomer')" onfocus="custSearchFocus('invCustomer')" onblur="custSearchBlur('invCustomer')">
+            <button class="cust-search-clear" id="clear_invCustomer" onclick="custSearchClear('invCustomer')" style="display:none;">✕</button>
+            <div class="cust-search-dropdown" id="drop_invCustomer" style="display:none;"></div>
+            <input type="hidden" id="invCustomer">
+          </div></div>
         <div class="form-group"><label>対象年月</label><input type="month" id="invMonth" onchange="loadInvoice()"></div>
       </div>
       <div id="invContent" style="display:none;">
@@ -1694,17 +1733,107 @@ function refreshAll(){
 }
 
 function refreshSelects(){
-  const opts=DB.get('customers').map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-  ['delCustomer','payCustomer','invCustomer','estCustomer'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el)el.innerHTML='<option value="">-- 顧客選択 --</option>'+opts;
-  });
+  // 検索コンボボックスはcustSearchで動的に取得するため設定不要
   // Report dropdowns include "all" option
+  const opts=DB.get('customers').map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   const allOpts='<option value="all">すべて</option>'+opts;
   ['rptSalesCust','rptPayCust'].forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.innerHTML=allOpts;
   });
+}
+
+// =============================================
+// 顧客検索コンボボックス
+// =============================================
+// fieldId: 'delCustomer' | 'payCustomer' | 'invCustomer' | 'estCustomer'
+// 選択後コールバックマップ
+const CUST_SEARCH_CALLBACKS = {
+  payCustomer: ()=>{ if(typeof loadAR==='function') loadAR(); },
+  invCustomer: ()=>{ if(typeof loadInvoice==='function') loadInvoice(); },
+};
+
+function custSearchInput(fieldId){
+  const inp=document.getElementById('search_'+fieldId);
+  const drop=document.getElementById('drop_'+fieldId);
+  const hidden=document.getElementById(fieldId);
+  const q=(inp.value||'').trim().toLowerCase();
+  // 入力があれば選択状態をリセット
+  if(hidden.value){ hidden.value=''; inp.classList.remove('cust-search-selected'); }
+  document.getElementById('clear_'+fieldId).style.display=inp.value?'block':'none';
+  custSearchRender(fieldId, q);
+  drop.style.display='block';
+}
+
+function custSearchFocus(fieldId){
+  const inp=document.getElementById('search_'+fieldId);
+  const q=(inp.value||'').trim().toLowerCase();
+  custSearchRender(fieldId, q);
+  document.getElementById('drop_'+fieldId).style.display='block';
+}
+
+function custSearchBlur(fieldId){
+  // 少し遅らせてクリックを先に処理
+  setTimeout(()=>{
+    const drop=document.getElementById('drop_'+fieldId);
+    if(drop) drop.style.display='none';
+    // 未選択の場合は入力欄をリセット
+    const hidden=document.getElementById(fieldId);
+    const inp=document.getElementById('search_'+fieldId);
+    if(!hidden.value && inp) inp.value='';
+  }, 200);
+}
+
+function custSearchRender(fieldId, q){
+  const drop=document.getElementById('drop_'+fieldId);
+  const custs=DB.get('customers');
+  const filtered=q
+    ? custs.filter(c=>
+        (c.name||'').toLowerCase().includes(q)||
+        (c.code||'').toLowerCase().includes(q)||
+        (c.tel||'').toLowerCase().includes(q)||
+        (c.contact||'').toLowerCase().includes(q)||
+        (c.addr||'').toLowerCase().includes(q)
+      )
+    : custs;
+  if(!filtered.length){
+    drop.innerHTML='<div class="cust-search-item"><span class="cust-sub">該当する顧客がいません</span></div>';
+    return;
+  }
+  drop.innerHTML=filtered.map(c=>`
+    <div class="cust-search-item" onmousedown="custSearchSelect('${fieldId}',${c.id},'${(c.name||'').replace(/'/g,"\'")}')">
+      <span class="cust-name">${c.name}</span>
+      <span class="cust-sub">${c.code||''} ${c.tel||''}</span>
+    </div>`).join('');
+}
+
+function custSearchSelect(fieldId, custId, custName){
+  document.getElementById(fieldId).value=custId;
+  const inp=document.getElementById('search_'+fieldId);
+  inp.value=custName;
+  inp.classList.add('cust-search-selected');
+  document.getElementById('drop_'+fieldId).style.display='none';
+  document.getElementById('clear_'+fieldId).style.display='block';
+  // コールバック実行
+  if(CUST_SEARCH_CALLBACKS[fieldId]) CUST_SEARCH_CALLBACKS[fieldId]();
+}
+
+function custSearchClear(fieldId){
+  document.getElementById(fieldId).value='';
+  const inp=document.getElementById('search_'+fieldId);
+  inp.value='';
+  inp.classList.remove('cust-search-selected');
+  document.getElementById('clear_'+fieldId).style.display='none';
+  document.getElementById('drop_'+fieldId).style.display='none';
+  inp.focus();
+  // コールバック（クリア時）
+  if(CUST_SEARCH_CALLBACKS[fieldId]) CUST_SEARCH_CALLBACKS[fieldId]();
+}
+
+// 外部からcustomerIdをセットする（再発行など）
+function custSearchSetById(fieldId, custId){
+  const c=DB.get('customers').find(x=>x.id==custId);
+  if(c) custSearchSelect(fieldId, c.id, c.name);
 }
 
 function updateCoBanner(){
@@ -5677,7 +5806,8 @@ function saveEstimate(){
 }
 
 function clearEstimate(){
-  ['estCustomer','estTitle','estNote'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  custSearchClear('estCustomer');
+  ['estTitle','estNote'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('estItemsBody').innerHTML='';estItems=[];addEstItem();calcEstTotal();
 }
 
@@ -5714,7 +5844,7 @@ function delEstimate(id){
 function convertEstToDelivery(id){
   const e=DB.get('estimates').find(x=>x.id==id);if(!e)return;
   // 変換は即実行（確認不要）
-  document.getElementById('delCustomer').value=e.customerId;
+  custSearchSetById('delCustomer', e.customerId);
   document.getElementById('delNote').value=e.title||'見積より';
   document.getElementById('delSaleType').value='credit';
   document.getElementById('delItemsBody').innerHTML='';delItems=[];
