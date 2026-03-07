@@ -279,9 +279,15 @@ tr:hover td{background:var(--cream);}
 <div id="page-customers" class="page">
   <div class="card">
     <div class="card-title">👤 顧客台帳</div>
-    <div style="display:flex;gap:8px;margin-bottom:10px;">
-      <input type="text" id="custSearch" placeholder="顧客名・電話・メニューキーで検索..." oninput="renderCustomers()" style="flex:1;">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <input type="text" id="custSearch" placeholder="顧客名・電話・メニューキーで検索..." oninput="renderCustomers()" style="flex:1;min-width:180px;">
       <button class="btn btn-primary" onclick="openCustomerModal()">＋ 新規</button>
+    </div>
+    <!-- 休眠フィルタータブ -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button id="custFilterActive" class="btn btn-sm btn-primary" onclick="setCustFilter('active')">✅ 有効</button>
+      <button id="custFilterDormant" class="btn btn-sm btn-outline" onclick="setCustFilter('dormant')">💤 休眠</button>
+      <button id="custFilterAll" class="btn btn-sm btn-outline" onclick="setCustFilter('all')">📋 すべて</button>
     </div>
     <div class="tbl-wrap">
       <table>
@@ -1740,8 +1746,8 @@ function refreshAll(){
 
 function refreshSelects(){
   // 検索コンボボックスはcustSearchで動的に取得するため設定不要
-  // Report dropdowns include "all" option
-  const opts=DB.get('customers').map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  // Report dropdowns include "all" option（休眠顧客は除外）
+  const opts=DB.get('customers').filter(c=>!c.dormant).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   const allOpts='<option value="all">すべて</option>'+opts;
   ['rptSalesCust','rptPayCust'].forEach(id=>{
     const el=document.getElementById(id);
@@ -1792,7 +1798,7 @@ function custSearchBlur(fieldId){
 
 function custSearchRender(fieldId, q){
   const drop=document.getElementById('drop_'+fieldId);
-  const custs=DB.get('customers');
+  const custs=DB.get('customers').filter(c=>!c.dormant);
   const qn=normalizeKana(q);
   const filtered=q
     ? custs.filter(c=>{
@@ -1920,42 +1926,67 @@ function normalizeKana(str){
   return s.toLowerCase();
 }
 
+let _custFilter='active'; // 'active' | 'dormant' | 'all'
+
+function setCustFilter(f){
+  _custFilter=f;
+  ['active','dormant','all'].forEach(k=>{
+    const el=document.getElementById('custFilter'+k.charAt(0).toUpperCase()+k.slice(1));
+    if(el){ el.className='btn btn-sm '+(k===f?'btn-primary':'btn-outline'); }
+  });
+  renderCustomers();
+}
+
 function renderCustomers(){
   const q=normalizeKana(document.getElementById('custSearch')?.value||'');
   const dels=DB.get('deliveries'),pays=DB.get('payments');
-  // コード順ソート（数字のみの場合は数値比較）
+  const migBalances=DB.get('migrationBalances');
+
+  // 並び順：①メニューキーなし→②メニューキーあり五十音順
   const sorted=[...DB.get('customers')].sort((a,b)=>{
-    const ca=a.code||'',cb=b.code||'';
-    const na=parseInt(ca),nb=parseInt(cb);
-    if(!isNaN(na)&&!isNaN(nb)) return na-nb;
-    return ca.localeCompare(cb,'ja');
+    const ka=normalizeKana(a.menuKey||'');
+    const kb=normalizeKana(b.menuKey||'');
+    if(!ka&&!kb) return (a.name||'').localeCompare(b.name||'','ja');
+    if(!ka) return -1; // メニューキーなしが先
+    if(!kb) return 1;
+    return ka.localeCompare(kb,'ja');
   });
+
   document.getElementById('customerTable').innerHTML=sorted
     .filter(c=>{
+      // 休眠フィルター
+      const isDormant=c.dormant===true;
+      if(_custFilter==='active'&&isDormant) return false;
+      if(_custFilter==='dormant'&&!isDormant) return false;
+      // テキスト検索
       if(!q) return true;
       const name=normalizeKana(c.name);
       const tel=(c.tel||'').toLowerCase();
       const email=(c.email||'').toLowerCase();
       const menuKey=normalizeKana(c.menuKey||'');
       const code=(c.code||'').toLowerCase();
-      // メニューキーは前方一致、その他は部分一致
       return name.includes(q)||tel.includes(q)||email.includes(q)||code.includes(q)||
              (menuKey&&menuKey.startsWith(q));
     })
     .map(c=>{
+      const isDormant=c.dormant===true;
       const s=dels.filter(d=>d.customerId==c.id&&!d.voided&&!isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
       const r=dels.filter(d=>d.customerId==c.id&&!d.voided&&isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
       const p=pays.filter(p=>p.customerId==c.id&&!p.voided).reduce((x,p)=>x+p.amount,0);
       const ar=s-r-p;
-      return`<tr>
-        <td><span class="text-sm" style="font-family:monospace;">${c.code||'—'}</span></td>
-        <td><strong>${c.name}</strong>${c.menuKey?`<br><span class="text-sm" style="color:var(--muted);">🔑${c.menuKey}</span>`:''}</td>
+      return`<tr style="${isDormant?'opacity:0.5;background:#f8f8f8;':''}">
+        <td><span class="text-sm" style="font-family:monospace;">${c.code||'—'}</span>${isDormant?'<br><span style="font-size:9px;color:#999;background:#eee;padding:1px 4px;border-radius:4px;">休眠</span>':''}</td>
+        <td><strong style="${isDormant?'color:#999;':''}">${c.name}</strong>${c.menuKey?`<br><span class="text-sm" style="color:var(--muted);">🔑${c.menuKey}</span>`:''}</td>
         <td>${c.tel||''}</td>
         <td>${c.closeDay}締め<br><span class="text-sm">${c.payTerm}</span></td>
         <td class="text-right"><span class="${ar>0?'color-accent fw-bold':''}">${fmt(ar)}</span></td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-sm btn-outline" onclick="viewCustDetail(${c.id})">台帳</button>
+          ${isDormant?'':`<button class="btn btn-sm btn-outline" onclick="viewCustDetail(${c.id})">台帳</button>`}
           <button class="btn btn-sm btn-outline" onclick="editCustomer(${c.id})">編集</button>
+          ${isDormant
+            ?`<button class="btn btn-sm btn-success" onclick="toggleDormant(${c.id},false)" title="有効に戻す">▶ 復活</button>`
+            :`<button class="btn btn-sm" style="background:#888;color:white;border:none;border-radius:6px;font-size:11px;padding:4px 8px;cursor:pointer;" onclick="toggleDormant(${c.id},true)" title="休眠にする">💤 休眠</button>`
+          }
         </td></tr>`;
     }).join('')||'<tr><td colspan="6" class="text-center text-sm" style="padding:20px;">見つかりません</td></tr>';
 }
@@ -2008,6 +2039,22 @@ function saveCustomer(){
   if(id){const i=custs.findIndex(c=>c.id==id);custs[i]={...custs[i],...data};}
   else{data.id=DB.nextId('customers');custs.push(data);}
   DB.set('customers',custs);closeModal('custModal');refreshSelects();renderCustomers();
+}
+
+function toggleDormant(id, dormant){
+  const custs=DB.get('customers');
+  const i=custs.findIndex(c=>c.id==id);
+  if(i<0) return;
+  const name=custs[i].name;
+  const msg=dormant?`「${name}」を休眠にします。
+納品・請求書の顧客選択には表示されなくなります。`
+                   :`「${name}」を有効に戻します。`;
+  showConfirm(msg,()=>{
+    custs[i].dormant=dormant;
+    DB.set('customers',custs);
+    renderCustomers();
+    refreshSelects();
+  },{okLabel:dormant?'休眠にする':'復活させる',okClass:dormant?'btn-outline':'btn-success'});
 }
 
 function viewCustDetail(id){
