@@ -720,6 +720,7 @@ tr:hover td{background:var(--cream);}
         </div>
         <div class="flex-end mt-16" style="gap:8px;flex-wrap:wrap;">
           <button class="btn btn-gold" onclick="previewDoc('invoice')">📄 請求書プレビュー</button>
+          <button class="btn btn-sm btn-outline" onclick="debugMigBalance()" style="font-size:10px;">🔍 移行デバッグ</button>
           <button class="btn btn-primary" onclick="openInvoiceSendModal()" id="invSendBtn" style="display:none;background:#2d9e5f;">📨 送信・配布</button>
         </div>
       </div>
@@ -2923,22 +2924,42 @@ function debugMigBalance(){
   const migBals=DB.get('migrationBalances');
   const custs=DB.get('customers');
   const panel=document.getElementById('migDebugPanel');
-  const content=document.getElementById('migDebugContent');
+  const el=document.getElementById('migDebugContent');
   panel.style.display='block';
 
   let txt='';
-  txt+=`選択顧客ID: "${custId}" (型:${typeof custId})\n`;
-  txt+=`選択年月: "${ym}"\n\n`;
+  txt+='=== 請求書 移行残高デバッグ ===\n';
+  txt+=`invCustomer hidden値: "${custId}" (型:${typeof custId})\n`;
+  txt+=`選択年月(ym): "${ym}"\n`;
+  txt+=`ym+'-01': "${ym+'-01'}"\n\n`;
+
   txt+=`migrationBalances件数: ${migBals.length}\n`;
   migBals.forEach((m,i)=>{
-    txt+=`  [${i}] customerId="${m.customerId}"(型:${typeof m.customerId}) amount=${m.amount} baseDate=${m.baseDate}\n`;
-    txt+=`       String比較: ${String(m.customerId)}===${String(custId)} → ${String(m.customerId)===String(custId)}\n`;
-    if(ym) txt+=`       baseDate<ym+'-01': ${m.baseDate}<${ym+'-01'} → ${m.baseDate<ym+'-01'}\n`;
+    const strMatch = String(m.customerId)===String(custId);
+    const dateOk = m.baseDate < ym+'-01';
+    txt+=`[${i}] custId="${m.customerId}" amount=${m.amount} baseDate=${m.baseDate}\n`;
+    txt+=`  ID一致(String比較): ${strMatch}\n`;
+    txt+=`  日付条件(baseDate<ym-01): ${dateOk}\n`;
+    txt+=`  → 反映される: ${strMatch&&dateOk}\n`;
   });
-  if(!migBals.length) txt+='  （データなし）\n';
-  txt+=`\n顧客一覧:\n`;
-  custs.forEach(c=>{ txt+=`  id=${c.id}(型:${typeof c.id}) name=${c.name} code=${c.code}\n`; });
-  content.textContent=txt;
+  if(!migBals.length) txt+='migrationBalancesが空です！\n';
+
+  // 実際のcarryOver計算
+  if(custId&&ym){
+    const prevDels=DB.get('deliveries').filter(d=>String(d.customerId)==String(custId)&&d.date<ym+'-01'&&!d.voided);
+    const prevPays=DB.get('payments').filter(p=>String(p.customerId)==String(custId)&&p.date<ym+'-01'&&!p.voided);
+    const prevSales=prevDels.filter(d=>!isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
+    const prevRets=prevDels.filter(d=>isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
+    const prevPaid=prevPays.reduce((s,p)=>s+(p.amount||0)+(p.discount||0),0);
+    const migBal=migBals.find(m=>String(m.customerId)==String(custId));
+    const migAmt=(migBal&&migBal.baseDate<ym+'-01')?(migBal.amount||0):0;
+    const carryOver=prevSales-prevRets-prevPaid+migAmt;
+    txt+=`\n=== carryOver計算 ===\n`;
+    txt+=`prevSales=${prevSales} prevRets=${prevRets} prevPaid=${prevPaid}\n`;
+    txt+=`migAmt=${migAmt}\n`;
+    txt+=`carryOver=${carryOver}\n`;
+  }
+  el.textContent=txt;
 }
 
 function loadInvoice(){
