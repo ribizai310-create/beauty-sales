@@ -724,6 +724,14 @@ tr:hover td{background:var(--cream);}
         </div>
       </div>
       <div id="invEmpty" class="empty-state"><div class="icon">📋</div>顧客と年月を選択してください</div>
+      <!-- デバッグパネル -->
+      <div id="migDebugPanel" style="margin-top:12px;padding:10px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;font-size:11px;display:none;">
+        <div style="font-weight:700;margin-bottom:6px;">🔍 移行残高デバッグ情報</div>
+        <div id="migDebugContent" style="font-family:monospace;white-space:pre-wrap;line-height:1.6;"></div>
+      </div>
+      <div style="margin-top:8px;">
+        <button class="btn btn-sm btn-outline" onclick="debugMigBalance()" style="font-size:10px;">🔍 移行残高デバッグ</button>
+      </div>
     </div>
   </div>
 
@@ -2908,6 +2916,30 @@ function delPayment(id){
 // =============================================
 // INVOICE
 // =============================================
+function debugMigBalance(){
+  const custId=document.getElementById('invCustomer').value;
+  const ym=document.getElementById('invMonth').value;
+  const migBals=DB.get('migrationBalances');
+  const custs=DB.get('customers');
+  const panel=document.getElementById('migDebugPanel');
+  const content=document.getElementById('migDebugContent');
+  panel.style.display='block';
+
+  let txt='';
+  txt+=`選択顧客ID: "${custId}" (型:${typeof custId})\n`;
+  txt+=`選択年月: "${ym}"\n\n`;
+  txt+=`migrationBalances件数: ${migBals.length}\n`;
+  migBals.forEach((m,i)=>{
+    txt+=`  [${i}] customerId="${m.customerId}"(型:${typeof m.customerId}) amount=${m.amount} baseDate=${m.baseDate}\n`;
+    txt+=`       String比較: ${String(m.customerId)}===${String(custId)} → ${String(m.customerId)===String(custId)}\n`;
+    if(ym) txt+=`       baseDate<ym+'-01': ${m.baseDate}<${ym+'-01'} → ${m.baseDate<ym+'-01'}\n`;
+  });
+  if(!migBals.length) txt+='  （データなし）\n';
+  txt+=`\n顧客一覧:\n`;
+  custs.forEach(c=>{ txt+=`  id=${c.id}(型:${typeof c.id}) name=${c.name} code=${c.code}\n`; });
+  content.textContent=txt;
+}
+
 function loadInvoice(){
   const custId=document.getElementById('invCustomer').value;
   // 送信ボタン表示制御
