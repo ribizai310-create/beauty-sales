@@ -2945,7 +2945,7 @@ function renderARSummary(){
     const s=dels.filter(d=>d.customerId==c.id&&!d.voided&&!isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
     const r=dels.filter(d=>d.customerId==c.id&&!d.voided&&isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
     const p=pays.filter(p=>p.customerId==c.id&&!p.voided).reduce((x,p)=>x+p.amount,0);
-    const migBal=migBalances.find(m=>m.customerId==c.id);
+    const migBal=migBalances.find(m=>String(m.customerId)==String(c.id));
     const migAmt=migBal?(migBal.amount||0):0;
     const ar=s-r-p+migAmt;
     const badge=ar===0?'<span class="badge badge-green">精算済</span>':ar>50000?'<span class="badge badge-red">要確認</span>':'<span class="badge badge-gold">未収あり</span>';
@@ -3072,7 +3072,7 @@ function saveMigrationData(){
     const inp=document.getElementById('migAmt_'+c.id);
     const amount=parseFloat(inp?.value)||0;
     if(amount>0){
-      newEntries.push({customerId:c.id,customerName:c.name,amount,baseDate,closeDay});
+      newEntries.push({customerId:String(c.id),customerName:c.name,amount,baseDate,closeDay});
     }
   });
   DB.set('migrationBalances',[...existing,...newEntries]);
@@ -3142,7 +3142,7 @@ function renderCollectTable(){
       const prevPaid =pays.filter(p=>p.customerId==c.id&&p.date<=prevToStr&&!p.voided).reduce((s,p)=>s+(p.amount||0),0);
       // 移行残高（旧システムからの繰越）：基準日以前のデータのみ加算
       const migBalances=DB.get('migrationBalances');
-      const migBal=migBalances.find(m=>m.customerId==c.id);
+      const migBal=migBalances.find(m=>String(m.customerId)==String(c.id));
       const migAmount=(migBal&&migBal.baseDate<=prevToStr)?(migBal.amount||0):0;
       const prevBill = prevSales - prevRets - prevPaid + migAmount;  // 前回請求額（繰越元）
 
@@ -3918,7 +3918,7 @@ function genInvoiceDoc(data,co,forcePrintMode){
   const prevPaid =prevPays.reduce((s,p)=>s+(p.amount||0)+(p.discount||0),0);
   // 移行残高（旧システムからの繰越）
   const _migBals=DB.get('migrationBalances');
-  const _migBal=_migBals.find(m=>m.customerId==custId);
+  const _migBal=_migBals.find(m=>String(m.customerId)==String(custId));
   const _migAmt=(_migBal&&_migBal.baseDate<ym+'-01')?(_migBal.amount||0):0;
   const carryOver=prevSales-prevRets-prevPaid+_migAmt;  // 繰越金額（移行残高含む）
 
