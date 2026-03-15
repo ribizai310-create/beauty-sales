@@ -4471,9 +4471,13 @@ function buildBulkList(){
       // period: for 末日 → full month, 20 → prev21~this20, 25 → prev26~this25
       const period=getClosePeriod(ym,day);
       const periodSales=dels.filter(d=>d.customerId==c.id&&d.date>=period.from&&d.date<=period.to).reduce((s,d)=>s+d.total,0);
-      const allSales=dels.filter(d=>d.customerId==c.id).reduce((s,d)=>s+d.total,0);
-      const allPay=pays.filter(p=>p.customerId==c.id).reduce((s,p)=>s+p.amount,0);
-      const ar=allSales-allPay;
+      const allSalesRaw=dels.filter(d=>String(d.customerId)==String(c.id)&&!d.voided&&!isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
+      const allRetsRaw=dels.filter(d=>String(d.customerId)==String(c.id)&&!d.voided&&isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
+      const allPay=pays.filter(p=>String(p.customerId)==String(c.id)&&!p.voided).reduce((s,p)=>s+p.amount,0);
+      const migBals=DB.get('migrationBalances');
+      const migBal=migBals.find(m=>String(m.customerId)==String(c.id));
+      const migAmt=migBal?(migBal.amount||0):0;
+      const ar=allSalesRaw-allRetsRaw-allPay+migAmt;
       const badge=ar===0?'<span class="badge badge-green">精算済</span>':ar>50000?'<span class="badge badge-red">要確認</span>':'<span class="badge badge-gold">未収あり</span>';
       // default: check if has any sales in period
       const checked=periodSales>0?'checked':'';
