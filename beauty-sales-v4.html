@@ -2924,9 +2924,13 @@ function loadInvoice(){
   const allSales=allDels.filter(d=>!isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
   const allRets=allDels.filter(d=> isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
   const allPay=allPays.reduce((s,p)=>s+p.amount,0);
+  // 移行残高を売掛残高に加算
+  const _invMigBals=DB.get('migrationBalances');
+  const _invMigBal=_invMigBals.find(m=>String(m.customerId)===String(custId));
+  const _invMigAmt=_invMigBal?(_invMigBal.amount||0):0;
   document.getElementById('invSales').textContent=fmt(dels.reduce((s,d)=>s+d.total,0));
   document.getElementById('invPaid').textContent=fmt(pays.reduce((s,p)=>s+p.amount,0));
-  document.getElementById('invAR').textContent=fmt(allSales-allRets-allPay);
+  document.getElementById('invAR').textContent=fmt(allSales-allRets-allPay+_invMigAmt);
   const events=[
     ...dels.map(d=>({date:d.date,type:'売上',desc:(d.saleType==='cash'?'現金売':'掛売')+(d.note?' '+d.note:''),sales:d.total,pay:0})),
     ...pays.map(p=>({date:p.date,type:'入金',desc:p.method+(p.note?' '+p.note:''),sales:0,pay:p.amount}))
@@ -3906,13 +3910,14 @@ function genInvoiceDoc(data,co,forcePrintMode){
   const ymStr=`${y}年${parseInt(m)}月`;
 
   // 当月データ（voided除外）
-  const dels=DB.get('deliveries').filter(d=>d.customerId==custId&&d.date?.startsWith(ym)&&!d.voided);
-  const pays=DB.get('payments').filter(p=>p.customerId==custId&&p.date?.startsWith(ym)&&!p.voided);
+  const custIdN=parseInt(custId)||custId; // 数値/文字列どちらでも一致するよう統一
+  const dels=DB.get('deliveries').filter(d=>String(d.customerId)==String(custId)&&d.date?.startsWith(ym)&&!d.voided);
+  const pays=DB.get('payments').filter(p=>String(p.customerId)==String(custId)&&p.date?.startsWith(ym)&&!p.voided);
 
   // 前月末時点の繰越金額
   const prevYm=prevMonth(ym);
-  const prevDels=DB.get('deliveries').filter(d=>d.customerId==custId&&d.date<ym+'-01'&&!d.voided);
-  const prevPays=DB.get('payments').filter(p=>p.customerId==custId&&p.date<ym+'-01'&&!p.voided);
+  const prevDels=DB.get('deliveries').filter(d=>String(d.customerId)==String(custId)&&d.date<ym+'-01'&&!d.voided);
+  const prevPays=DB.get('payments').filter(p=>String(p.customerId)==String(custId)&&p.date<ym+'-01'&&!p.voided);
   const prevSales=prevDels.filter(d=>!isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
   const prevRets =prevDels.filter(d=> isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
   const prevPaid =prevPays.reduce((s,p)=>s+(p.amount||0)+(p.discount||0),0);
