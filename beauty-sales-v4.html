@@ -2999,15 +2999,31 @@ function loadInvoice(){
 function renderARSummary(){
   const dels=DB.get('deliveries'),pays=DB.get('payments');
   const migBalances=DB.get('migrationBalances');
-  document.getElementById('arSummaryTable').innerHTML=DB.get('customers').map(c=>{
-    const s=dels.filter(d=>d.customerId==c.id&&!d.voided&&!isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
-    const r=dels.filter(d=>d.customerId==c.id&&!d.voided&&isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
-    const p=pays.filter(p=>p.customerId==c.id&&!p.voided).reduce((x,p)=>x+p.amount,0);
+  // メニューキー五十音順ソート
+  const sorted=[...DB.get('customers')].sort((a,b)=>{
+    const ka=normalizeKana(a.menuKey||'');
+    const kb=normalizeKana(b.menuKey||'');
+    if(!ka&&!kb) return (a.name||'').localeCompare(b.name||'','ja');
+    if(!ka) return -1;
+    if(!kb) return 1;
+    return ka.localeCompare(kb,'ja');
+  });
+  document.getElementById('arSummaryTable').innerHTML=sorted.map(c=>{
+    const s=dels.filter(d=>String(d.customerId)==String(c.id)&&!d.voided&&!isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
+    const r=dels.filter(d=>String(d.customerId)==String(c.id)&&!d.voided&&isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
+    const p=pays.filter(q=>String(q.customerId)==String(c.id)&&!q.voided).reduce((x,q)=>x+q.amount,0);
     const migBal=migBalances.find(m=>String(m.customerId)==String(c.id));
     const migAmt=migBal?(migBal.amount||0):0;
     const ar=s-r-p+migAmt;
     const badge=ar===0?'<span class="badge badge-green">精算済</span>':ar>50000?'<span class="badge badge-red">要確認</span>':'<span class="badge badge-gold">未収あり</span>';
-    return`<tr><td><strong>${c.name}</strong></td><td class="text-right">${fmt(s)}</td><td class="text-right color-success">${fmt(p)}</td><td class="text-right fw-bold ${ar>0?'color-accent':''}">${fmt(ar)}</td><td>${badge}</td></tr>`;
+    return`<tr>
+      <td><strong>${c.name}</strong></td>
+      <td>${c.closeDay}締め</td>
+      <td class="text-right">${fmt(s)}</td>
+      <td class="text-right color-success">${fmt(p)}</td>
+      <td class="text-right fw-bold ${ar>0?'color-accent':''}">${migAmt>0?'<span title="移行残高含む">'+fmt(ar)+'</span>':fmt(ar)}</td>
+      <td>${badge}</td>
+    </tr>`;
   }).join('');
 }
 
