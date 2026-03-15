@@ -1035,6 +1035,7 @@ tr:hover td{background:var(--cream);}
       <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <div style="font-size:11px;color:var(--muted);">※ 残高がない顧客は空欄のままでOKです</div>
         <button class="btn btn-primary" onclick="saveMigrationData()">💾 この締め日の残高を保存</button>
+        <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#c0392b;" onclick="clearAllMigData()">🗑 全移行データをリセット</button>
       </div>
       <div id="migrationSaveMsg" style="display:none;margin-top:8px;" class="alert alert-success"></div>
     </div>
@@ -3090,6 +3091,16 @@ function renderMigSummary(){
       <div style="font-size:10px;color:var(--muted);">${registered}/${custs.length}社 登録済</div>
     </div>`;
   }).join('');
+}
+
+function clearAllMigData(){
+  const msg='全ての移行残高データをリセットします。各タブで再入力・保存してください。';
+  showConfirm(msg,()=>{
+    DB.set('migrationBalances',[]);
+    renderMigrationTable();
+    renderMigSummary();
+    alert('リセットしました。各タブで再入力・保存してください。');
+  },{okLabel:'リセットする',okClass:'btn-danger'});
 }
 
 function saveMigrationData(){
