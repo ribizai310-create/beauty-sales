@@ -1570,6 +1570,9 @@ tr:hover td{background:var(--cream);}
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:6px;cursor:pointer;">
               <input type="checkbox" id="migChk_payments" checked> 💴 入金データ
             </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:6px;cursor:pointer;">
+              <input type="checkbox" id="migChk_migrationBalances" checked> 📦 移行残高データ
+            </label>
           </div>
         </div>
       </div>
@@ -4867,7 +4870,7 @@ function executeMigrate(){
   if(!data){ alert('データがありません'); return; }
 
   // チェックされた項目のみ引き継ぎ
-  const keys = ['settings','customers','products','deliveries','payments'];
+  const keys = ['settings','customers','products','deliveries','payments','migrationBalances'];
   const selected = keys.filter(k=>{
     const el = document.getElementById('migChk_'+k);
     return el && el.checked;
@@ -4880,11 +4883,12 @@ function executeMigrate(){
   // 引き継ぎ実行
   ['A','B'].forEach(co=>{
     const c = data.companies[co]; if(!c) return;
-    if(selected.includes('settings')   && c.settings)   DB.setSingle('settings',   c.settings,   co);
-    if(selected.includes('customers')  && c.customers)  DB.set('customers',  c.customers,  co);
-    if(selected.includes('products')   && c.products)   DB.set('products',   c.products,   co);
-    if(selected.includes('deliveries') && c.deliveries) DB.set('deliveries', c.deliveries, co);
-    if(selected.includes('payments')   && c.payments)   DB.set('payments',   c.payments,   co);
+    if(selected.includes('settings')          && c.settings)          DB.setSingle('settings',c.settings,co);
+    if(selected.includes('customers')         && c.customers)         DB.set('customers',c.customers,co);
+    if(selected.includes('products')          && c.products)          DB.set('products',c.products,co);
+    if(selected.includes('deliveries')        && c.deliveries)        DB.set('deliveries',c.deliveries,co);
+    if(selected.includes('payments')          && c.payments)          DB.set('payments',c.payments,co);
+    if(selected.includes('migrationBalances') && c.migrationBalances) DB.set('migrationBalances',c.migrationBalances,co);
   });
 
   closeModal('migrateModal');
