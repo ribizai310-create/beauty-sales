@@ -1897,13 +1897,17 @@ function renderDashboard(){
   const dels=DB.get('deliveries'), pays=DB.get('payments');
   const td=dels.filter(d=>d.date===today), tp=pays.filter(p=>p.date===today);
   const md=dels.filter(d=>d.date&&d.date.startsWith(ym));
-  const allSales=dels.reduce((s,d)=>s+d.total,0);
-  const allPay=pays.reduce((s,p)=>s+p.amount,0);
+  const migBalances=DB.get('migrationBalances');
+  const totalMigAmt=migBalances.reduce((s,m)=>s+(m.amount||0),0);
+  const allSalesN=dels.filter(d=>!d.voided&&!isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
+  const allRetsN=dels.filter(d=>!d.voided&&isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
+  const allPay=pays.filter(p=>!p.voided).reduce((s,p)=>s+(p.amount||0)+(p.discount||0),0);
+  const totalAR=allSalesN-allRetsN-allPay+totalMigAmt;
   document.getElementById('statsGrid').innerHTML=`
-    <div class="stat-card"><div class="stat-val">${fmt(td.reduce((s,d)=>s+d.total,0))}</div><div class="stat-label">本日売上</div></div>
-    <div class="stat-card"><div class="stat-val color-success">${fmt(tp.reduce((s,p)=>s+p.amount,0))}</div><div class="stat-label">本日入金</div></div>
-    <div class="stat-card"><div class="stat-val">${fmt(md.reduce((s,d)=>s+d.total,0))}</div><div class="stat-label">今月売上</div></div>
-    <div class="stat-card"><div class="stat-val color-accent">${fmt(allSales-allPay)}</div><div class="stat-label">売掛金合計</div></div>
+    <div class="stat-card"><div class="stat-val">${fmt(td.filter(d=>!d.voided).reduce((s,d)=>s+d.total,0))}</div><div class="stat-label">本日売上</div></div>
+    <div class="stat-card"><div class="stat-val color-success">${fmt(tp.filter(p=>!p.voided).reduce((s,p)=>s+p.amount,0))}</div><div class="stat-label">本日入金</div></div>
+    <div class="stat-card"><div class="stat-val">${fmt(md.filter(d=>!d.voided).reduce((s,d)=>s+d.total,0))}</div><div class="stat-label">今月売上</div></div>
+    <div class="stat-card"><div class="stat-val color-accent">${fmt(totalAR)}</div><div class="stat-label">売掛金合計</div></div>
   `;
   let act='';
   if(!td.length&&!tp.length)act='<div class="empty-state"><div class="icon">📋</div>本日の活動はありません</div>';
@@ -1912,9 +1916,12 @@ function renderDashboard(){
   document.getElementById('todayActivity').innerHTML=act||'';
   const custs=DB.get('customers');
   const ars=custs.map(c=>{
-    const s=dels.filter(d=>d.customerId==c.id).reduce((x,d)=>x+d.total,0);
-    const p=pays.filter(p=>p.customerId==c.id).reduce((x,p)=>x+p.amount,0);
-    return{name:c.name,ar:s-p};
+    const s=dels.filter(d=>String(d.customerId)==String(c.id)&&!d.voided&&!isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
+    const r=dels.filter(d=>String(d.customerId)==String(c.id)&&!d.voided&&isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
+    const p=pays.filter(q=>String(q.customerId)==String(c.id)&&!q.voided).reduce((x,q)=>x+(q.amount||0)+(q.discount||0),0);
+    const mig=migBalances.find(m=>String(m.customerId)==String(c.id));
+    const migA=mig?(mig.amount||0):0;
+    return{name:c.name,ar:s-r-p+migA};
   }).filter(x=>x.ar>0).sort((a,b)=>b.ar-a.ar).slice(0,5);
   document.getElementById('arRanking').innerHTML=ars.length?`<div class="tbl-wrap"><table><thead><tr><th>顧客名</th><th class="r">売掛残</th></tr></thead><tbody>${ars.map(a=>`<tr><td>${a.name}</td><td class="text-right fw-bold color-accent">${fmt(a.ar)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state"><div class="icon">✅</div>未収金なし</div>';
 }
@@ -1980,10 +1987,11 @@ function renderCustomers(){
     })
     .map(c=>{
       const isDormant=c.dormant===true;
-      const s=dels.filter(d=>d.customerId==c.id&&!d.voided&&!isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
-      const r=dels.filter(d=>d.customerId==c.id&&!d.voided&&isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
-      const p=pays.filter(p=>p.customerId==c.id&&!p.voided).reduce((x,p)=>x+p.amount,0);
-      const ar=s-r-p;
+      const s=dels.filter(d=>String(d.customerId)==String(c.id)&&!d.voided&&!isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
+      const r=dels.filter(d=>String(d.customerId)==String(c.id)&&!d.voided&&isReturnType(d.saleType)).reduce((x,d)=>x+d.total,0);
+      const p=pays.filter(q=>String(q.customerId)==String(c.id)&&!q.voided).reduce((x,q)=>x+q.amount,0);
+      const migB=DB.get('migrationBalances').find(m=>String(m.customerId)==String(c.id));
+      const ar=s-r-p+(migB?migB.amount||0:0);
       return`<tr style="${isDormant?'opacity:0.5;background:#f8f8f8;':''}">
         <td><span class="text-sm" style="font-family:monospace;">${c.code||'—'}</span>${isDormant?'<br><span style="font-size:9px;color:#999;background:#eee;padding:1px 4px;border-radius:4px;">休眠</span>':''}</td>
         <td><strong style="${isDormant?'color:#999;':''}">${c.name}</strong>${c.menuKey?`<br><span class="text-sm" style="color:var(--muted);">🔑${c.menuKey}</span>`:''}</td>
@@ -2821,12 +2829,14 @@ function purgeVoided(type){
 // PAYMENT
 // =============================================
 function calcAR(custId){
-  const dels=DB.get('deliveries').filter(d=>d.customerId==custId&&!d.voided);
-  const pays=DB.get('payments').filter(p=>p.customerId==custId&&!p.voided);
+  const dels=DB.get('deliveries').filter(d=>String(d.customerId)==String(custId)&&!d.voided);
+  const pays=DB.get('payments').filter(p=>String(p.customerId)==String(custId)&&!p.voided);
   const sales=dels.filter(d=>!isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
   const rets =dels.filter(d=> isReturnType(d.saleType)).reduce((s,d)=>s+d.total,0);
   const paid =pays.reduce((s,p)=>s+(p.amount||0)+(p.discount||0),0);
-  return sales-rets-paid;
+  const migBal=DB.get('migrationBalances').find(m=>String(m.customerId)==String(custId));
+  const migAmt=migBal?(migBal.amount||0):0;
+  return sales-rets-paid+migAmt;
 }
 function loadAR(){
   const custId=document.getElementById('payCustomer').value;
