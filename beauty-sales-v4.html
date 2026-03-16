@@ -4700,6 +4700,7 @@ function buildExportData(){
       products:DB.get('products',co),
       deliveries:DB.get('deliveries',co),
       payments:DB.get('payments',co),
+      migrationBalances:DB.get('migrationBalances',co),
     };
   });
   return data;
@@ -4713,6 +4714,7 @@ function applyImportData(data){
     if(c.products)DB.set('products',c.products,co);
     if(c.deliveries)DB.set('deliveries',c.deliveries,co);
     if(c.payments)DB.set('payments',c.payments,co);
+    if(c.migrationBalances)DB.set('migrationBalances',c.migrationBalances,co);
   });
 }
 
