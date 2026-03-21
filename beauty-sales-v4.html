@@ -2460,18 +2460,26 @@ async function tryStartCamera(){
     return;
   }
 
+  // mediaDevices API の存在チェック
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    st.className='alert alert-danger';
+    st.textContent='カメラAPIが使用できません。iPhoneの設定→Safari→カメラを「許可」に変更し、Safariを再起動してください。';
+    vp.style.display='none';
+    return;
+  }
+
   // getUserMediaで事前にカメラアクセスを確認
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment' } });
-    stream.getTracks().forEach(t => t.stop()); // 確認後すぐ解放
+    stream.getTracks().forEach(t => t.stop());
   } catch(e) {
     st.className='alert alert-danger';
     if(e.name==='NotAllowedError'){
-      st.textContent='カメラの使用が許可されていません。設定→Safari→カメラ→許可に変更後、再度お試しください。';
+      st.textContent='カメラの使用が許可されていません。iPhoneの設定→Safari→カメラを「許可」に変更後、再度お試しください。';
     } else if(e.name==='NotFoundError'){
       st.textContent='カメラが見つかりません。JANコードを手動入力してください。';
     } else if(e.name==='TypeError'){
-      st.textContent='このブラウザではカメラが使用できません。Safariで開き直してください。';
+      st.textContent='カメラAPIエラーです。iPhoneの設定→Safari→カメラを「許可」に変更し、Safariを再起動してください。';
     } else {
       st.textContent='カメラ起動エラー(' + e.name + '): ' + e.message;
     }
