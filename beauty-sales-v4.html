@@ -1315,7 +1315,12 @@ tr:hover td{background:var(--cream);}
       <div style="margin-bottom:14px;">
         <div style="font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
           <span>📦 JANコードを入力してください</span>
-          <button type="button" onclick="tryStartCamera()" style="font-size:11px;background:var(--mid);color:white;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;">📷 カメラを試す</button>
+<label style="font-size:11px;background:var(--mid);color:white;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;display:inline-block;">
+            📷 カメラで読取
+            <input type="file" accept="image/*" capture="environment" id="nativeCameraInput"
+              onchange="readBarcodeFromImage(event)"
+              style="display:none;">
+          </label>
         </div>
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <input type="text" id="manualJan"
@@ -2436,6 +2441,69 @@ function startBarcodeScanner(targetFieldId){
   document.getElementById('scannerModal').classList.add('open');
   setTimeout(()=>{ inp.focus(); }, 200);
   // カメラは自動起動しない（手動ボタンで試す方式）
+}
+
+// iOSネイティブカメラでバーコード画像を読み取る
+async function readBarcodeFromImage(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  event.target.value = ''; // リセット
+
+  const st = document.getElementById('scannerStatus');
+  st.style.display='block';
+  st.className='alert alert-info';
+  st.textContent='画像を解析中...';
+
+  // BarcodeDetector APIが使える場合（Chrome等）
+  if('BarcodeDetector' in window){
+    try{
+      const detector = new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','upc_a','upc_e','itf']});
+      const img = await createImageBitmap(file);
+      const barcodes = await detector.detect(img);
+      if(barcodes.length>0){
+        const code = barcodes[0].rawValue;
+        st.className='alert alert-success';
+        st.textContent='✅ 読み取り成功: ' + code;
+        document.getElementById('manualJan').value = code;
+        janLiveSearch();
+        setTimeout(()=>{ confirmManualJan(); }, 500);
+        return;
+      } else {
+        st.className='alert alert-danger';
+        st.textContent='バーコードが検出できませんでした。手動入力してください。';
+        return;
+      }
+    }catch(e){
+      // BarcodeDetector失敗時はQuaggaで試す
+    }
+  }
+
+  // QuaggaJS静止画解析にフォールバック
+  if(typeof Quagga !== 'undefined'){
+    const url = URL.createObjectURL(file);
+    Quagga.decodeSingle({
+      decoder:{ readers:['ean_reader','ean_8_reader','code_128_reader','code_39_reader','upc_reader','upc_e_reader'] },
+      locate: true,
+      src: url,
+    }, function(result){
+      URL.revokeObjectURL(url);
+      if(result && result.codeResult){
+        const code = result.codeResult.code;
+        st.className='alert alert-success';
+        st.textContent='✅ 読み取り成功: ' + code;
+        document.getElementById('manualJan').value = code;
+        janLiveSearch();
+        setTimeout(()=>{ confirmManualJan(); }, 500);
+      } else {
+        st.className='alert alert-danger';
+        st.textContent='バーコードが検出できませんでした。明るい場所で撮影し直してください。';
+      }
+    });
+    return;
+  }
+
+  st.className='alert alert-danger';
+  st.textContent='バーコード読取に失敗しました。JANコードを手動入力してください。';
 }
 
 async function tryStartCamera(){
