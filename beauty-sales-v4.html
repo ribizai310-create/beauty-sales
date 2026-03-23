@@ -226,8 +226,7 @@ tr:hover td{background:var(--cream);}
 #collectPrintContent .collect-stat-val{font-size:14px;font-weight:700;color:#1a1a2e;}
 #collectPrintContent .collect-stat-lbl{font-size:10px;color:#888;}
 </style>
-  <!-- jsPDF (MP-B20印刷用PDF生成) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
   <!-- QuaggaJS: バーコードスキャナー (iOS Safari対応) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 </head>
@@ -3698,53 +3697,23 @@ function handlePrint(){
   }
 }
 
-// SII URL Print Agent経由でMP-B20に印刷
-async function printToSII(){
+// SII URL Print Agent経由でMP-B20に印刷（テキスト方式）
+function printToSII(){
   const el=document.getElementById('docContent');
   if(!el){ alert('印刷内容がありません'); return; }
-
   try{
-    // jsPDF取得
-    const jsPDFLib = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-    if(!jsPDFLib){
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-      await new Promise(r=>setTimeout(r,500));
-    }
-    const {jsPDF} = window.jspdf || {};
-    const jsPDFClass = jsPDF || window.jsPDF;
-    if(!jsPDFClass){ alert('PDF生成ライブラリの読み込みに失敗しました。'); return; }
-    const doc = new jsPDFClass({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: [58, 200], // 58mm幅のレシート
-    });
-
-    // HTMLコンテンツをテキストとして取得
     const lines = el.innerText.split('\n').filter(l=>l.trim());
-    let y=10;
-    doc.setFontSize(8);
-    lines.forEach(line=>{
-      if(y>190){ doc.addPage([58,200]); y=10; }
-      doc.text(line.trim(), 5, y);
-      y+=5;
-    });
-
-    // Base64に変換
-    const pdfBase64 = doc.output('datauristring').split(',')[1];
-
-    // SII URL Print AgentのURLスキームを呼び出す
-    const params = new URLSearchParams({
-      BtKeepConnect: 'always',
-      Format: 'pdf',
-      Data: pdfBase64,
-      ErrorDialog: 'yes',
-      PaperWidth: '58',
-      FitToWidth: 'yes',
-      CutType: 'partial',
-    });
-    const url = 'siiprintagent://1.0/print?' + params.toString();
+    const text = lines.join('\n') + '\n\n\n';
+    const encoded = btoa(unescape(encodeURIComponent(text)));
+    const url = 'siiprintagent://1.0/print?'
+      + 'BtKeepConnect=always'
+      + '&Format=text'
+      + '&CharCode=UTF-8'
+      + '&PaperWidth=58'
+      + '&CutType=partial'
+      + '&ErrorDialog=yes'
+      + '&Data=' + encoded;
     window.location.href = url;
-
   }catch(e){
     alert('印刷エラー: ' + e.message + ' 通常印刷に切り替えます。');
     window.print();
