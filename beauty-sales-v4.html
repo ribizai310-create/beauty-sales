@@ -1895,6 +1895,7 @@ function showPage(page,btn){
   if(el)el.classList.add('active');
   if(btn)btn.classList.add('active');
   if(page==='dashboard')renderDashboard();
+  if(page==='settings') setTimeout(loadPrintSettings, 100);
   if(page==='analysis')renderAnalysis('monthly');
   if(page==='settings')loadCoSettings();
   if(page==='report'){renderSalesReport();renderDailyReport();}
@@ -4632,6 +4633,17 @@ function printDoc(){window.print();}
 // SETTINGS
 // =============================================
 let settingsCo='A';
+function loadPrintSettings(){
+  const co=getCo();
+  const handyEl=document.getElementById('handyModel');
+  if(handyEl && co.handyModel) handyEl.value=co.handyModel;
+  const printModeEl=document.getElementById('printMode');
+  if(printModeEl){
+    const saved=DB.global('printMode');
+    if(saved) printModeEl.value=saved;
+  }
+}
+
 function settingsSelectCo(co){
   settingsCo=co;
   document.getElementById('settingsCoA').className='co-tab'+(co==='A'?' active':'');
@@ -4667,6 +4679,10 @@ function saveCoSettings(){
 function savePrintSettings(){
   DB.setGlobal('printMode',document.getElementById('printMode').value);
   currentPrintMode=document.getElementById('printMode').value;
+  // handyModelを会社設定に保存
+  const co=getCo();
+  co.handyModel=document.getElementById('handyModel').value;
+  DB.setSingle('settings',co);
   alert('印刷設定を保存しました！');
 }
 function setActiveCo(co){
