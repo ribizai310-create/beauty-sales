@@ -226,8 +226,8 @@ tr:hover td{background:var(--cream);}
 #collectPrintContent .collect-stat-val{font-size:14px;font-weight:700;color:#1a1a2e;}
 #collectPrintContent .collect-stat-lbl{font-size:10px;color:#888;}
 </style>
-  <!-- Star WebPRNT SDK (MP-B20対応) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <!-- jsPDF (MP-B20印刷用PDF生成) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- QuaggaJS: バーコードスキャナー (iOS Safari対応) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 </head>
@@ -3704,15 +3704,16 @@ async function printToSII(){
   if(!el){ alert('印刷内容がありません'); return; }
 
   try{
-    // html2canvasでHTMLをPDFに変換してBase64取得
-    // jsPDFが利用可能か確認
-    if(typeof window.jspdf === 'undefined' && typeof jsPDF === 'undefined'){
-      // jsPDF未読み込みの場合は動的に読み込む
+    // jsPDF取得
+    const jsPDFLib = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    if(!jsPDFLib){
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      await new Promise(r=>setTimeout(r,500));
     }
-
-    const {jsPDF} = window.jspdf || {jsPDF: window.jsPDF};
-    const doc = new jsPDF({
+    const {jsPDF} = window.jspdf || {};
+    const jsPDFClass = jsPDF || window.jsPDF;
+    if(!jsPDFClass){ alert('PDF生成ライブラリの読み込みに失敗しました。'); return; }
+    const doc = new jsPDFClass({
       orientation: 'portrait',
       unit: 'mm',
       format: [58, 200], // 58mm幅のレシート
