@@ -3697,34 +3697,87 @@ function handlePrint(){
   }
 }
 
-// SII URL Print Agent経由でMP-B20に印刷
-function printToSII(){
+// SII URL Print Agent経由でMP-B20に印刷（PDF方式）
+async function printToSII(){
   const el=document.getElementById('docContent');
   if(!el){ alert('印刷内容がありません'); return; }
   try{
-    // テキスト抽出してBase64エンコード
+    // HTMLコンテンツをそのままPDFとして印刷するため
+    // iOSのPrint APIでBlobを生成してBase64に変換
+    const htmlContent = `<!DOCTYPE html><html><head>
+      <meta charset="UTF-8">
+      <style>
+        body{font-family:monospace;font-size:8pt;width:54mm;margin:2mm;}
+        *{box-sizing:border-box;}
+      </style>
+      </head><body>${el.innerHTML}</body></html>`;
+
+    // html2pdf的アプローチ：HTMLをiframe経由でPDF化
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:58mm;';
+    document.body.appendChild(iframe);
+    iframe.contentDocument.write(htmlContent);
+    iframe.contentDocument.close();
+
+    // iframeからPrintを呼び出しPDFを取得（iOS非対応のため別方法）
+    document.body.removeChild(iframe);
+
+    // 代替：XMLのPRN形式でテキスト送信を試みる
+    // SII仕様の正式なPDF形式
     const textLines = el.innerText.split('\n').filter(l=>l.trim());
-    const text = textLines.join('\n') + '\n\n\n';
-    const encoded = btoa(unescape(encodeURIComponent(text)));
-    // SII仕様：パラメーターはカンマ区切り、PDFのみ対応のため
-    // まずiPhoneのPDF印刷ダイアログを使い、SIIアプリに渡す方法を試みる
-    // URLスキームのクエリはカンマ区切りが正しい仕様
+    const printText = textLines.join('\r\n') + '\r\n\r\n\r\n';
+
+    // Uint8ArrayでPDFを生成（最小限のPDF構造）
+    const pdfContent = buildMinimalPDF(printText);
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(pdfContent)));
+
     const params = [
       'BtKeepConnect=always',
-      'Format=text',
-      'CharCode=UTF-8',
+      'Format=pdf',
       'PaperWidth=58',
+      'FitToWidth=yes',
       'CutType=partial',
       'ErrorDialog=yes',
-      'Data=' + encoded
+      'Data=' + base64
     ].join(',');
     const url = 'siiprintagent://1.0/print?' + params;
     window.location.href = url;
+
   }catch(e){
-    alert('印刷エラー: ' + e.message + ' 通常印刷に切り替えます。');
-    window.print();
+    console.error(e);
+    alert('印刷エラー: ' + e.message);
   }
 }
+
+function buildMinimalPDF(text){
+  // 最小限のPDFバイナリを生成（テキストのみ）
+  const escaped = text.replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
+  const stream =
+    'BT\n' +
+    '/F1 8 Tf\n' +
+    '10 780 Td\n' +
+    '12 TL\n' +
+    escaped.split('\n').map(l=>`(${l.replace(/[()\\]/g,c=>'\\'+c)}) Tj T*`).join('\n') +
+    '\nET\n';
+  const streamBytes = new TextEncoder().encode(stream);
+  const len = streamBytes.length;
+
+  const header = `%PDF-1.4\n`;
+  const obj1 = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`;
+  const obj2 = `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`;
+  const obj3 = `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 165 841] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n`;
+  const obj4 = `4 0 obj\n<< /Length ${len} >>\nstream\n${stream}\nendstream\nendobj\n`;
+  const obj5 = `5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>\nendobj\n`;
+
+  const body = header+obj1+obj2+obj3+obj4+obj5;
+  const xrefOffset = body.length;
+  const xref = `xref\n0 6\n0000000000 65535 f \n${String(header.length).padStart(10,'0')} 00000 n \n${String(header.length+obj1.length).padStart(10,'0')} 00000 n \n${String(header.length+obj1.length+obj2.length).padStart(10,'0')} 00000 n \n${String(header.length+obj1.length+obj2.length+obj3.length).padStart(10,'0')} 00000 n \n${String(header.length+obj1.length+obj2.length+obj3.length+obj4.length).padStart(10,'0')} 00000 n \n`;
+  const trailer = `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  const full = body + xref + trailer;
+  return new TextEncoder().encode(full);
+}
+
 
 function loadScript(src){
   return new Promise((resolve,reject)=>{
