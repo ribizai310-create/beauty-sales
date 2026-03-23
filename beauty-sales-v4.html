@@ -3697,22 +3697,28 @@ function handlePrint(){
   }
 }
 
-// SII URL Print Agent経由でMP-B20に印刷（テキスト方式）
+// SII URL Print Agent経由でMP-B20に印刷
 function printToSII(){
   const el=document.getElementById('docContent');
   if(!el){ alert('印刷内容がありません'); return; }
   try{
-    const lines = el.innerText.split('\n').filter(l=>l.trim());
-    const text = lines.join('\n') + '\n\n\n';
+    // テキスト抽出してBase64エンコード
+    const textLines = el.innerText.split('\n').filter(l=>l.trim());
+    const text = textLines.join('\n') + '\n\n\n';
     const encoded = btoa(unescape(encodeURIComponent(text)));
-    const url = 'siiprintagent://1.0/print?'
-      + 'BtKeepConnect=always'
-      + '&Format=text'
-      + '&CharCode=UTF-8'
-      + '&PaperWidth=58'
-      + '&CutType=partial'
-      + '&ErrorDialog=yes'
-      + '&Data=' + encoded;
+    // SII仕様：パラメーターはカンマ区切り、PDFのみ対応のため
+    // まずiPhoneのPDF印刷ダイアログを使い、SIIアプリに渡す方法を試みる
+    // URLスキームのクエリはカンマ区切りが正しい仕様
+    const params = [
+      'BtKeepConnect=always',
+      'Format=text',
+      'CharCode=UTF-8',
+      'PaperWidth=58',
+      'CutType=partial',
+      'ErrorDialog=yes',
+      'Data=' + encoded
+    ].join(',');
+    const url = 'siiprintagent://1.0/print?' + params;
     window.location.href = url;
   }catch(e){
     alert('印刷エラー: ' + e.message + ' 通常印刷に切り替えます。');
