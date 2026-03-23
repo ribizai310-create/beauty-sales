@@ -3697,55 +3697,74 @@ function handlePrint(){
   }
 }
 
-// SII URL Print Agent経由でMP-B20に印刷（PDF方式）
+// SII URL Print Agent経由でMP-B20に印刷
 async function printToSII(){
   const el=document.getElementById('docContent');
   if(!el){ alert('印刷内容がありません'); return; }
   try{
-    // HTMLコンテンツをそのままPDFとして印刷するため
-    // iOSのPrint APIでBlobを生成してBase64に変換
-    const htmlContent = `<!DOCTYPE html><html><head>
+    // iOSのPrint APIを使ってHTMLをPDFに変換
+    // まずHTMLコンテンツを取得
+    const htmlStr = el.innerHTML;
+    const paperWidthPt = 164; // 58mm ≈ 164pt
+
+    // HTMLからPDFをBlob生成（iOSのPrint API）
+    // iOSではBlobを直接URLスキームに渡せないため
+    // HTMLコンテンツをiframeでPDF化してからBase64に変換する
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:58mm;border:none;';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+    iframeDoc.open();
+    iframeDoc.write(`<!DOCTYPE html><html><head>
       <meta charset="UTF-8">
       <style>
-        body{font-family:monospace;font-size:8pt;width:54mm;margin:2mm;}
-        *{box-sizing:border-box;}
+        @page{size:58mm auto;margin:2mm;}
+        body{font-family:'Hiragino Sans','Yu Gothic',monospace;font-size:8pt;
+          width:54mm;margin:0;padding:0;word-break:break-all;}
+        table{width:100%;border-collapse:collapse;font-size:7pt;}
+        .no-print{display:none!important;}
       </style>
-      </head><body>${el.innerHTML}</body></html>`;
+    </head><body>${htmlStr}</body></html>`);
+    iframeDoc.close();
 
-    // html2pdf的アプローチ：HTMLをiframe経由でPDF化
-    const iframe = document.createElement('iframe');
-    iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:58mm;';
-    document.body.appendChild(iframe);
-    iframe.contentDocument.write(htmlContent);
-    iframe.contentDocument.close();
-
-    // iframeからPrintを呼び出しPDFを取得（iOS非対応のため別方法）
+    // iframeのwindow.printを使ってPDF Blob取得
+    // iOSではwindow.print()がPDFを生成するため
+    // まずBlob URLを作成して取得を試みる
     document.body.removeChild(iframe);
 
-    // 代替：XMLのPRN形式でテキスト送信を試みる
-    // SII仕様の正式なPDF形式
-    const textLines = el.innerText.split('\n').filter(l=>l.trim());
-    const printText = textLines.join('\r\n') + '\r\n\r\n\r\n';
+    // 代替：HTMLをBlobにしてObject URLを作成
+    const htmlBlob = new Blob([`<!DOCTYPE html><html><head>
+      <meta charset="UTF-8">
+      <style>
+        @page{size:58mm auto;margin:2mm;}
+        body{font-family:monospace;font-size:8pt;width:54mm;margin:0;padding:0;}
+        table{width:100%;border-collapse:collapse;font-size:7pt;}
+        .no-print{display:none!important;}
+      </style>
+    </head><body>${htmlStr}</body></html>`], {type:'text/html'});
 
-    // Uint8ArrayでPDFを生成（最小限のPDF構造）
-    const pdfContent = buildMinimalPDF(printText);
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(pdfContent)));
+    const blobUrl = URL.createObjectURL(htmlBlob);
 
+    // SII URL Print AgentにPDFのURLを渡す（URLFromPath方式）
     const params = [
-      'BtKeepConnect=always',
-      'Format=pdf',
-      'PaperWidth=58',
+      'PrinterModel=MP-B20',
+      'Interface=Bluetooth',
       'FitToWidth=yes',
+      'PaperWidth=58',
       'CutType=partial',
       'ErrorDialog=yes',
-      'Data=' + base64
+      'PDFFilePath=' + encodeURIComponent(blobUrl)
     ].join(',');
+
     const url = 'siiprintagent://1.0/print?' + params;
     window.location.href = url;
 
+    setTimeout(()=>URL.revokeObjectURL(blobUrl), 5000);
+
   }catch(e){
     console.error(e);
-    alert('印刷エラー: ' + e.message);
+    alert('印刷準備エラー: ' + e.message);
   }
 }
 
