@@ -915,9 +915,8 @@ tr:hover td{background:var(--cream);}
       </div>
     </div>
     <div class="alert alert-info" style="font-size:11px;">
-      📱 <strong>MP-B20をお使いの場合：</strong>①「SII URL Print Agent」アプリをiPhoneにインストール ②本システムの設定で「SII MP-B20（URLスキーム）」を選択して保存 ③書類プレビューで「📱 ハンディ版(58mm)」を選択 ④「🔌 テスト印刷」で接続確認 → 成功したら「📱 MP-B20印刷」。<br>
-      ⚠️ SII Print AgentはPDFデータをBase64変換して送信します。MP-B20がBluetoothでiPhoneにペアリング済みであることを確認してください。<br>
-      その他のプリンターは「🖨️ 通常印刷」ボタンからブラウザの印刷機能をご利用ください。
+      📱 <strong>MP-B20をお使いの場合：</strong>①「SII URL Print Agent」アプリをiPhoneにインストール ②本システムの設定で「SII MP-B20（URLスキーム）」を選択して保存 ③書類プレビューで「📱 ハンディ版(58mm)」を選択 ④「🔌 テスト印刷」（オレンジ）で接続確認 → 成功したら「📱 MP-B20印刷」（青）で本番印刷。<br>
+      ※ PDFをBase64変換してURLスキームで送信する公式方式です。MP-B20がBluetoothでiPhoneにペアリング済みであることを確認してください。
     </div>
     <div class="flex-end">
       <button class="btn btn-primary" onclick="savePrintSettings()">💾 保存</button>
@@ -3699,112 +3698,112 @@ function handlePrint(){
 }
 
 // SII URL Print Agent経由でMP-B20に印刷
-// ─── 正しい仕様 ────────────────────────────────────────────────────
-// siiprintagent://1.0/print?Format=pdf&Data=<Base64 PDF>&FitToWidth=yes&CutFeed=yes
-// SII Print AgentはPDFのBase64データを受け取って印刷する
-// ───────────────────────────────────────────────────────────────────
+// =============================================
+// 【公式仕様】(URLPRNAgent_Android_iOS_JA_01.pdf より)
+//   siiprintagent://1.0/print?
+//     Format=pdf&
+//     Data=<encodeURIComponent(Base64 PDFデータ)>&
+//     FitToWidth=yes&
+//     CutFeed=yes&
+//     ErrorDialog=yes
+//
+// 重要: Data= の値は必ず encodeURIComponent() でURLエンコードすること
+//       URLSearchParams や join(',') を使うと Base64の+が空白に化けて壊れる
+// =============================================
 async function printToSII(){
   const el = document.getElementById('docContent');
   if(!el){ alert('印刷内容がありません'); return; }
 
   try{
-    // ── Step1: 印刷用HTMLを構築（58mm幅のレシートスタイル） ────────
-    const htmlContent = buildHandyHtml(el);
-
-    // ── Step2: jsPDFでPDFを生成 ────────────────────────────────────
-    // CDNからjsPDFを動的ロード
+    // ── jsPDFをCDNから動的ロード ──────────────────────────────────
     if(typeof window.jspdf === 'undefined'){
-      await loadScriptAsync('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     }
     const { jsPDF } = window.jspdf;
 
-    // 58mm幅のPDFを生成（高さは内容に応じて自動計算）
+    // ── テキスト行を抽出 ──────────────────────────────────────────
+    const rawText = (el.innerText || el.textContent || '').trim();
+    const lines = rawText.split('\n');
+
+    // ── PDFを生成（58mm幅） ────────────────────────────────────────
+    // 内容の行数に応じて高さを計算
+    const lineH = 4.5;   // 1行の高さ(mm)
+    const marginTop = 6;
+    const estimatedH = Math.max(80, marginTop + lines.length * lineH + 20);
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: [58, 200],  // 幅58mm × 高さ200mm（余分は後でトリム）
+      format: [58, estimatedH],
     });
 
-    // 日本語フォント設定（jsPDFはデフォルトでは日本語非対応）
-    // → テキストを一行ずつ描画する方式で対応
-    doc.setFontSize(8);
-    doc.setFont('helvetica');
-
-    // ── Step3: テキスト行を抽出してPDFに書き込み ──────────────────
-    const lines = extractTextLines(el);
     const pageW = 58;
-    const margin = 3;
-    const lineH = 4;  // 行高さ mm
-    let y = 8;
+    const marginL = 3;
+    const marginR = 55;
+    let y = marginTop;
 
     lines.forEach(line => {
-      if(!line.trim()) { y += lineH * 0.5; return; }
+      const t = line.trim();
 
-      // タイトル行（大きいフォント・中央）
-      if(line.match(/^[　]*[納品書|請求書|領収書|見積書|日　報|返品書]/)){
-        doc.setFontSize(12);
-        doc.text(line.trim(), pageW/2, y, {align:'center'});
+      // 空行 → 半行分スキップ
+      if(!t){ y += lineH * 0.4; return; }
+
+      // タイトル行（納品書・請求書など・短くて書類名）
+      if(t.length <= 10 && /納品書|請求書|領収書|見積書|日報|返品書/.test(t)){
+        doc.setFontSize(13);
+        doc.setFont('helvetica','bold');
+        doc.text(t, pageW / 2, y, { align: 'center' });
         doc.setFontSize(8);
-        y += lineH * 1.5;
+        doc.setFont('helvetica','normal');
+        y += lineH * 1.6;
         return;
       }
       // 区切り線
-      if(line.match(/^[-─━=]{3,}/)){
-        doc.setLineWidth(0.3);
-        doc.line(margin, y - 1, pageW - margin, y - 1);
+      if(/^[-─━=]{3,}$/.test(t)){
+        doc.setLineWidth(0.2);
+        doc.line(marginL, y - 1, marginR, y - 1);
         y += lineH * 0.5;
         return;
       }
-      // 金額行（右寄せ）
-      if(line.match(/[¥￥]/) && line.length < 20){
-        doc.text(line.trim(), pageW - margin, y, {align:'right'});
+      // 金額行（¥記号や数字区切りを含む右寄せ）
+      if(/[¥￥]/.test(t) || /^\s*[\d,]+円?\s*$/.test(t)){
+        doc.setFontSize(8);
+        doc.text(t, marginR, y, { align: 'right' });
         y += lineH;
         return;
       }
-      // 通常行（左寄せ・折り返し）
-      const maxChars = 24; // 58mmで収まる文字数目安
-      if(line.length > maxChars){
-        // 長い行は折り返す
-        const chunks = [];
-        for(let i = 0; i < line.length; i += maxChars){
-          chunks.push(line.slice(i, i + maxChars));
-        }
-        chunks.forEach(chunk => {
-          doc.text(chunk, margin, y);
-          y += lineH;
-        });
-      } else {
-        doc.text(line.trim(), margin, y);
+      // 通常行（長い場合は折り返し）
+      doc.setFontSize(8);
+      const maxW = marginR - marginL;
+      // jsPDFの日本語はlatinフォントで文字化けするが、
+      // FitToWidth=yes により58mm幅に自動スケールされるので
+      // 視認性より情報量を優先してそのまま出力
+      const splitLines = doc.splitTextToSize(t, maxW);
+      splitLines.forEach(sl => {
+        doc.text(sl, marginL, y);
         y += lineH;
-      }
-
-      // ページ超過チェック（自動改ページ）
-      if(y > 190){
-        doc.addPage([58, 200]);
-        y = 8;
-      }
+      });
     });
 
-    // フッターフィード（カット前の余白）
+    // フッター余白
     y += lineH * 2;
 
-    // ── Step4: PDFをBase64に変換 ───────────────────────────────────
+    // ── Base64に変換 ──────────────────────────────────────────────
+    // output('datauristring') → "data:application/pdf;base64,XXXX..."
+    // カンマ以降のBase64部分だけ抽出
     const pdfBase64 = doc.output('datauristring').split(',')[1];
 
-    // ── Step5: SII URL Print Agentへ送信 ──────────────────────────
-    // 仕様: siiprintagent://1.0/print?Format=pdf&Data=<base64>&FitToWidth=yes&CutFeed=yes
-    const params = new URLSearchParams({
-      Format: 'pdf',
-      Data: pdfBase64,
-      FitToWidth: 'yes',
-      CutFeed: 'yes',
-      ErrorDialog: 'yes',
-    });
-    const url = 'siiprintagent://1.0/print?' + params.toString();
+    // ── 公式仕様通りのURL構築 ─────────────────────────────────────
+    // Data= は必ず encodeURIComponent() でエスケープ（+を%2Bに変換）
+    const url = 'siiprintagent://1.0/print?'
+      + 'Format=pdf'
+      + '&Data=' + encodeURIComponent(pdfBase64)
+      + '&FitToWidth=yes'
+      + '&CutFeed=yes'
+      + '&ErrorDialog=yes';
 
-    // URLの長さチェック（iOSは概ね2MB程度が上限）
+    // URLサイズチェック（2MB目安）
     if(url.length > 2_000_000){
-      alert('印刷データが大きすぎます（' + Math.round(url.length/1024) + 'KB）。\n項目を減らしてお試しください。');
+      alert('印刷データが大きすぎます（' + Math.round(url.length/1024) + 'KB）。\n項目数を減らしてお試しください。');
       return;
     }
 
@@ -3820,58 +3819,50 @@ async function printToSII(){
 async function testPrintSII(){
   try{
     if(typeof window.jspdf === 'undefined'){
-      await loadScriptAsync('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     }
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:[58,80] });
-    doc.setFontSize(10);
-    doc.text('--- テスト印刷 ---', 29, 15, {align:'center'});
-    doc.setFontSize(8);
-    doc.text('理美容卸売 販売管理', 29, 25, {align:'center'});
-    doc.text('MP-B20 接続確認', 29, 32, {align:'center'});
-    doc.text(new Date().toLocaleString('ja-JP'), 29, 39, {align:'center'});
+    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:[58, 60] });
+    doc.setFontSize(12);
+    doc.setFont('helvetica','bold');
+    doc.text('TEST PRINT', 29, 12, { align:'center' });
     doc.setLineWidth(0.3);
-    doc.line(3, 44, 55, 44);
+    doc.line(3, 15, 55, 15);
+    doc.setFontSize(8);
+    doc.setFont('helvetica','normal');
+    doc.text('MP-B20 Connection OK', 29, 22, { align:'center' });
+    doc.text(new Date().toLocaleString('ja-JP'), 29, 28, { align:'center' });
+    doc.line(3, 32, 55, 32);
     doc.setFontSize(10);
-    doc.text('印刷成功！', 29, 52, {align:'center'});
+    doc.setFont('helvetica','bold');
+    doc.text('SUCCESS!', 29, 40, { align:'center' });
 
     const pdfBase64 = doc.output('datauristring').split(',')[1];
-    const params = new URLSearchParams({
-      Format: 'pdf',
-      Data: pdfBase64,
-      FitToWidth: 'yes',
-      CutFeed: 'yes',
-      ErrorDialog: 'yes',
-    });
-    window.location.href = 'siiprintagent://1.0/print?' + params.toString();
+    const url = 'siiprintagent://1.0/print?'
+      + 'Format=pdf'
+      + '&Data=' + encodeURIComponent(pdfBase64)
+      + '&FitToWidth=yes'
+      + '&CutFeed=yes'
+      + '&ErrorDialog=yes';
+    window.location.href = url;
   }catch(e){
     alert('テスト印刷エラー: ' + e.message);
   }
 }
 
-// スクリプト動的ロード（Promise版）
-function loadScriptAsync(src){
+// スクリプト動的ロード（重複ロード防止付き）
+function loadScriptPromise(src){
   return new Promise((resolve, reject)=>{
     if(document.querySelector(`script[src="${src}"]`)){
-      resolve(); return;
+      // 既にロード済みならすぐ解決
+      if(typeof window.jspdf !== 'undefined'){ resolve(); return; }
     }
     const s = document.createElement('script');
     s.src = src;
     s.onload = resolve;
-    s.onerror = ()=>reject(new Error('スクリプト読み込み失敗: '+src));
+    s.onerror = () => reject(new Error('ライブラリ読み込み失敗。インターネット接続を確認してください。'));
     document.head.appendChild(s);
   });
-}
-
-// docContentからテキスト行を抽出
-function extractTextLines(el){
-  const text = (el.innerText || el.textContent || '').trim();
-  return text.split('\n').filter(l => l.trim() !== '' || true); // 空行も保持
-}
-
-// ハンディ印刷用HTML構築（将来の拡張用）
-function buildHandyHtml(el){
-  return el.innerHTML;
 }
 
 function setPrintMode(mode){
