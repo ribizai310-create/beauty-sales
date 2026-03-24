@@ -3692,163 +3692,135 @@ function showDocModal(){
 function handlePrint(){
   const co=getCo();
   const model=co.handyModel||'generic';
-  if(model==='sii_mpb20' && currentPrintMode==='handy'){
-    printToSII();
-  } else {
-    window.print();
-  }
+  if(model==='sii_mpb20'&&currentPrintMode==='handy'){ printToSII(); }
+  else { window.print(); }
 }
 
-let _libsLoaded = false;
-
+let _libsLoaded=false;
 function loadPrintLibs(){
-  return new Promise(async (resolve, reject)=>{
-    if(_libsLoaded){ resolve(); return; }
+  return new Promise(async(resolve,reject)=>{
+    if(_libsLoaded){resolve();return;}
     try{
-      if(typeof window.jspdf === 'undefined'){
-        await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-      }
-      if(typeof html2canvas === 'undefined'){
-        await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-      }
-      _libsLoaded = true;
-      resolve();
-    }catch(e){ reject(e); }
+      if(typeof window.jspdf==='undefined') await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      if(typeof html2canvas==='undefined') await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      _libsLoaded=true; resolve();
+    }catch(e){reject(e);}
   });
 }
-
 function loadScriptPromise(src){
-  return new Promise((resolve, reject)=>{
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if(existing){
-      const isLoaded = src.includes('jspdf') ? typeof window.jspdf!=='undefined' : typeof html2canvas!=='undefined';
-      if(isLoaded){ resolve(); return; }
-    }
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = ()=>reject(new Error('ライブラリ読み込み失敗。Wi-Fi接続を確認してください。'));
+  return new Promise((resolve,reject)=>{
+    const ex=document.querySelector(`script[src="${src}"]`);
+    if(ex){const ok=src.includes('jspdf')?typeof window.jspdf!=='undefined':typeof html2canvas!=='undefined';if(ok){resolve();return;}}
+    const s=document.createElement('script');s.src=src;s.onload=resolve;
+    s.onerror=()=>reject(new Error('ライブラリ読み込み失敗（Wi-Fi接続確認）'));
     document.head.appendChild(s);
   });
 }
 
 async function printToSII(){
-  const el = document.getElementById('docContent');
-  if(!el){ alert('印刷内容がありません'); return; }
-
-  const siiBtn = document.getElementById('siiPrintBtn');
-  const origHTML = siiBtn ? siiBtn.innerHTML : '';
-  if(siiBtn){ siiBtn.innerHTML = '⏳ 準備中...'; siiBtn.disabled = true; }
-
+  const el=document.getElementById('docContent');
+  if(!el){alert('印刷内容がありません');return;}
+  const siiBtn=document.getElementById('siiPrintBtn');
+  const origHTML=siiBtn?siiBtn.innerHTML:'';
+  if(siiBtn){siiBtn.innerHTML='⏳ 準備中...';siiBtn.disabled=true;}
   try{
     await loadPrintLibs();
-    const { jsPDF } = window.jspdf;
+    const {jsPDF}=window.jspdf;
 
-    // ── 印刷対象要素（.doc-previewを優先） ──────────────────────
-    const sourceEl = el.querySelector('.doc-preview') || el.querySelector('div') || el;
+    // 印刷対象要素
+    const sourceEl=el.querySelector('.doc-preview')||el.querySelector('div')||el;
 
-    // ── 領収書ハンディ版は横向き ─────────────────────────────────
-    const isLandscape = (currentDocType === 'receipt' && currentPrintMode === 'handy');
+    // 領収書ハンディ版は横長レイアウト→90度回転して縦向きPDFに配置
+    const isReceipt=(currentDocType==='receipt'&&currentPrintMode==='handy');
 
-    // ── html2canvasでキャプチャ（3倍解像度） ─────────────────────
-    const srcW = sourceEl.scrollWidth || sourceEl.offsetWidth || 300;
-    const printPx = isLandscape ? 780 : 660;  // landscape:130mm×6dpp / portrait:58mm×3
-    const scale = printPx / srcW;
+    // html2canvasでキャプチャ
+    // 領収書(横長126mm): 高解像度でキャプチャ
+    // 納品書(縦58mm): 3倍解像度
+    const srcW=sourceEl.scrollWidth||sourceEl.offsetWidth||300;
+    const targetPx=isReceipt?1200:660;
+    const scale=targetPx/srcW;
 
-    const canvas = await html2canvas(sourceEl, {
-      scale: scale,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      scrollX: 0,
-      scrollY: 0,
+    const canvas=await html2canvas(sourceEl,{
+      scale,useCORS:true,allowTaint:true,
+      backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0
     });
 
-    // ── PDF寸法 ────────────────────────────────────────────────────
-    const marginL = 2, marginTop = 3;
+    let doc,imgData,imgW,imgH_calc;
 
-    let pageW_mm, pageH_mm, imgW_mm;
-    if(isLandscape){
-      // 横向き: 幅130mm × 高さ58mm
-      pageW_mm = 130;
-      imgW_mm  = 130 - marginL * 2;
-      const imgH = (canvas.height / canvas.width) * imgW_mm;
-      pageH_mm = Math.max(54, imgH + marginTop + 4);
-    } else {
-      // 縦向き: 幅58mm × 高さ可変
-      pageW_mm = 58;
-      imgW_mm  = 58 - marginL * 2;
-      const imgH = (canvas.height / canvas.width) * imgW_mm;
-      pageH_mm = Math.max(60, imgH + marginTop + 6);
+    if(isReceipt){
+      // ── 領収書: 横長画像を90度回転して縦向きPDF(58mm幅)に配置 ──
+      // canvasを90度回転した新しいcanvasを作成
+      const rotCanvas=document.createElement('canvas');
+      rotCanvas.width=canvas.height;
+      rotCanvas.height=canvas.width;
+      const ctx=rotCanvas.getContext('2d');
+      ctx.translate(rotCanvas.width/2,rotCanvas.height/2);
+      ctx.rotate(-Math.PI/2);  // 反時計回り90度
+      ctx.drawImage(canvas,-canvas.width/2,-canvas.height/2);
+
+      // 回転後の画像をPDFに配置
+      // 回転後: 幅=元の高さ, 高さ=元の幅
+      const mmW=54;  // 58mm - 左右マージン2mm×2
+      const mmH=(rotCanvas.height/rotCanvas.width)*mmW;
+      const pageH=Math.max(58,mmH+8);
+
+      doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
+      imgData=rotCanvas.toDataURL('image/jpeg',0.92);
+      doc.addImage(imgData,'JPEG',2,3,mmW,mmH);
+
+    }else{
+      // ── 納品書等: 縦向き通常配置 ──
+      const mmW=54;
+      imgH_calc=(canvas.height/canvas.width)*mmW;
+      const pageH=Math.max(60,imgH_calc+8);
+      doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
+      imgData=canvas.toDataURL('image/jpeg',0.92);
+      doc.addImage(imgData,'JPEG',2,3,mmW,imgH_calc);
     }
 
-    const doc = new jsPDF({
-      orientation: isLandscape ? 'landscape' : 'portrait',
-      unit: 'mm',
-      format: [pageW_mm, pageH_mm],
-    });
+    // SII Print Agent へ送信
+    const pdfBase64=doc.output('datauristring').split(',')[1];
+    const url='siiprintagent://1.0/print?Format=pdf'
+      +'&Data='+encodeURIComponent(pdfBase64)
+      +'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
 
-    const imgH_final = (canvas.height / canvas.width) * imgW_mm;
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-    doc.addImage(imgData, 'JPEG', marginL, marginTop, imgW_mm, imgH_final);
-
-    // ── SII Print Agent へ送信 ────────────────────────────────────
-    const pdfBase64 = doc.output('datauristring').split(',')[1];
-    const url = 'siiprintagent://1.0/print?'
-      + 'Format=pdf'
-      + '&Data=' + encodeURIComponent(pdfBase64)
-      + '&FitToWidth=yes'
-      + '&CutFeed=yes'
-      + '&ErrorDialog=yes';
-
-    if(url.length > 3_500_000){
-      alert('データが大きすぎます（' + Math.round(url.length/1024) + 'KB）\n通常印刷をお使いください。');
-      return;
-    }
-
-    window.location.href = url;
+    if(url.length>3_500_000){alert('データが大きすぎます。通常印刷をお使いください。');return;}
+    window.location.href=url;
 
   }catch(e){
-    console.error('MP-B20印刷エラー:', e);
-    alert('印刷エラー: ' + e.message);
+    console.error('MP-B20印刷エラー:',e);
+    alert('印刷エラー: '+e.message);
   }finally{
-    if(siiBtn){ siiBtn.innerHTML = origHTML; siiBtn.disabled = false; }
+    if(siiBtn){siiBtn.innerHTML=origHTML;siiBtn.disabled=false;}
   }
 }
 
-// テスト印刷（接続確認用）
+// テスト印刷
 async function testPrintSII(){
-  const btn = document.getElementById('siiTestBtn');
-  if(btn){ btn.innerHTML='⏳ 準備中...'; btn.disabled=true; }
+  const btn=document.getElementById('siiTestBtn');
+  if(btn){btn.innerHTML='⏳ 準備中...';btn.disabled=true;}
   try{
-    if(typeof window.jspdf === 'undefined'){
-      await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-    }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:[58,80] });
-    doc.setFontSize(14); doc.setFont('helvetica','bold');
-    doc.text('--- TEST PRINT ---', 29, 15, {align:'center'});
-    doc.setFontSize(10); doc.setFont('helvetica','normal');
-    doc.text('MP-B20 Connection OK', 29, 26, {align:'center'});
-    doc.text(new Date().toISOString().slice(0,19), 29, 34, {align:'center'});
-    doc.setLineWidth(0.4); doc.line(3, 39, 55, 39);
-    doc.setFontSize(16); doc.setFont('helvetica','bold');
-    doc.text('SUCCESS!', 29, 50, {align:'center'});
-    const pdfBase64 = doc.output('datauristring').split(',')[1];
-    window.location.href = 'siiprintagent://1.0/print?Format=pdf&Data='
-      + encodeURIComponent(pdfBase64) + '&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
-  }catch(e){
-    alert('テスト印刷エラー: ' + e.message);
-  }finally{
-    if(btn){ btn.innerHTML='🔌 テスト印刷'; btn.disabled=false; }
-  }
+    if(typeof window.jspdf==='undefined') await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,80]});
+    doc.setFontSize(14);doc.setFont('helvetica','bold');
+    doc.text('--- TEST PRINT ---',29,15,{align:'center'});
+    doc.setFontSize(10);doc.setFont('helvetica','normal');
+    doc.text('MP-B20 Connection OK',29,26,{align:'center'});
+    doc.text(new Date().toISOString().slice(0,19),29,34,{align:'center'});
+    doc.setLineWidth(0.4);doc.line(3,39,55,39);
+    doc.setFontSize(16);doc.setFont('helvetica','bold');
+    doc.text('SUCCESS!',29,50,{align:'center'});
+    const b64=doc.output('datauristring').split(',')[1];
+    window.location.href='siiprintagent://1.0/print?Format=pdf&Data='+encodeURIComponent(b64)+'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
+  }catch(e){alert('テスト印刷エラー: '+e.message);}
+  finally{if(btn){btn.innerHTML='🔌 テスト印刷';btn.disabled=false;}}
 }
 
-function buildMinimalPDF(text){ return null; }
-function loadScript(src){ return loadScriptPromise(src); }
-function printToMPB20(){ printToSII(); }
-function extractPrintLines(el){ return []; }
+function buildMinimalPDF(t){return null;}
+function loadScript(src){return loadScriptPromise(src);}
+function printToMPB20(){printToSII();}
+function extractPrintLines(el){return[];}
 
 function setPrintMode(mode){
   currentPrintMode=mode;
@@ -3909,67 +3881,58 @@ function genDeliveryDoc(d,c,dateStr,co){
   const saleTypeLabel={credit:'掛売',cash:'現金売',return:'返　品'};
   const isReturn = d.saleType==='return';
 
-  // ===== HANDY VERSION (58mm レシートプリンター・正式伝票) =====
+  // ===== HANDY VERSION (58mm レシートプリンター) =====
   if(currentPrintMode==='handy'){
     const taxLabel = i => i.taxRate===8?' ☆':i.taxRate===0?' ★':'';
-    return`<div class="doc-preview" style="width:52mm;font-size:13px;padding:6px 8px;font-family:'Noto Sans JP',sans-serif;line-height:1.8;background:white;">
+    return`<div class="doc-preview" style="width:52mm;padding:8px 6px;font-family:'Noto Sans JP',sans-serif;line-height:1.9;background:white;">
 
-      <!-- タイトル -->
-      <div style="text-align:center;font-size:16px;font-weight:900;letter-spacing:4px;margin-bottom:2px;">${isReturn?'返　品　書':'納　品　書'}</div>
-      <div style="text-align:center;font-size:12px;margin-bottom:1px;">${co.name||''}</div>
-      ${co.tel?`<div style="text-align:center;font-size:11px;">TEL: ${co.tel}</div>`:''}
-      ${co.invoiceNo?`<div style="text-align:center;font-size:10px;">登録番号: ${co.invoiceNo}</div>`:''}
-      <div style="border-top:1.5px solid #000;margin:5px 0;"></div>
+      <div style="text-align:center;font-size:18px;font-weight:900;letter-spacing:4px;margin-bottom:3px;">${isReturn?'返　品　書':'納　品　書'}</div>
+      <div style="text-align:center;font-size:13px;font-weight:600;margin-bottom:1px;">${co.name||''}</div>
+      ${co.tel?`<div style="text-align:center;font-size:12px;">TEL: ${co.tel}</div>`:''}
+      ${co.invoiceNo?`<div style="text-align:center;font-size:11px;">登録番号: ${co.invoiceNo}</div>`:''}
+      <div style="border-top:2px solid #000;margin:6px 0 4px;"></div>
 
-      <!-- 日付・顧客 -->
-      <div style="font-size:12px;margin-bottom:1px;">${dateStr}</div>
-      <div style="font-weight:700;font-size:15px;margin-bottom:2px;">${c.name} 御中</div>
-      <div style="font-size:11px;color:#555;">${saleTypeLabel[d.saleType]||''}</div>
+      <div style="font-size:13px;margin-bottom:2px;">${dateStr}</div>
+      <div style="font-weight:700;font-size:17px;margin-bottom:2px;">${c.name} 御中</div>
+      <div style="font-size:12px;color:#555;margin-bottom:2px;">${saleTypeLabel[d.saleType]||''}</div>
       <div style="border-top:1px dashed #000;margin:5px 0;"></div>
 
-      <!-- 商品明細ヘッダー -->
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;color:#555;margin-bottom:2px;border-bottom:1px solid #ccc;padding-bottom:2px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:#444;border-bottom:1px solid #000;padding-bottom:3px;margin-bottom:3px;">
         <span style="flex:1;">品　名</span>
-        <span style="width:30px;text-align:right;">数量</span>
-        <span style="width:52px;text-align:right;">単価</span>
-        <span style="width:56px;text-align:right;font-weight:700;">税込</span>
+        <span style="width:28px;text-align:right;">数量</span>
+        <span style="width:50px;text-align:right;">単価</span>
+        <span style="width:54px;text-align:right;">税込</span>
       </div>
 
-      <!-- 商品行 -->
       ${items.map(i => i.isDiscount ? `
-        <div style="font-size:12px;color:#856404;display:flex;justify-content:space-between;padding:2px 0;">
-          <span style="flex:1;">▲ ${i.name||'値引き'}</span>
-          <span style="width:56px;text-align:right;font-weight:700;">▲${Math.round(Math.abs(i.price||0)).toLocaleString()}</span>
+        <div style="font-size:13px;color:#856404;display:flex;justify-content:space-between;padding:2px 0;">
+          <span style="flex:1;">▲${i.name||'値引き'}</span>
+          <span style="width:54px;text-align:right;font-weight:700;">▲${Math.round(Math.abs(i.price||0)).toLocaleString()}</span>
         </div>` : `
-        <div style="padding:3px 0;border-bottom:1px dotted #ddd;">
-          <div style="font-size:13px;font-weight:600;">${i.name}${taxLabel(i)}</div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;">
-            <span style="width:30px;text-align:right;">${i.qty}</span>
-            <span style="width:52px;text-align:right;">${Math.round(i.price).toLocaleString()}</span>
-            <span style="width:56px;text-align:right;font-weight:700;">${Math.round(i.total).toLocaleString()}</span>
+        <div style="padding:4px 0;border-bottom:1px dotted #ccc;">
+          <div style="font-size:14px;font-weight:700;line-height:1.4;">${i.name}${taxLabel(i)}</div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;">
+            <span style="width:28px;text-align:right;">${i.qty}</span>
+            <span style="width:50px;text-align:right;">${Math.round(i.price).toLocaleString()}</span>
+            <span style="width:54px;text-align:right;font-weight:700;">${Math.round(i.total).toLocaleString()}</span>
           </div>
         </div>`
       ).join('')}
 
-      <!-- 税内訳 -->
-      <div style="border-top:1.5px solid #000;margin:5px 0 3px;"></div>
-      ${tb.b10?`
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:#555;"><span>10%対象 税抜:</span><span>${Math.round(tb.b10).toLocaleString()}</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:#555;"><span>　消費税(10%):</span><span>${Math.round(tb.t10).toLocaleString()}</span></div>`:''}
-      ${tb.b8?`
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:#555;"><span>8%対象☆ 税抜:</span><span>${Math.round(tb.b8).toLocaleString()}</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:#555;"><span>　消費税(8%):</span><span>${Math.round(tb.t8).toLocaleString()}</span></div>`:''}
-      ${tb.b0?`<div style="display:flex;justify-content:space-between;font-size:11px;color:#555;"><span>非課税★:</span><span>${Math.round(tb.b0).toLocaleString()}</span></div>`:''}
+      <div style="border-top:2px solid #000;margin:5px 0 3px;"></div>
+      ${tb.b10?`<div style="display:flex;justify-content:space-between;font-size:12px;color:#555;"><span>10%対象 税抜:</span><span>${Math.round(tb.b10).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#555;"><span>　消費税(10%):</span><span>${Math.round(tb.t10).toLocaleString()}</span></div>`:''}
+      ${tb.b8?`<div style="display:flex;justify-content:space-between;font-size:12px;color:#555;"><span>8%対象☆ 税抜:</span><span>${Math.round(tb.b8).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#555;"><span>　消費税(8%):</span><span>${Math.round(tb.t8).toLocaleString()}</span></div>`:''}
+      ${tb.b0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:#555;"><span>非課税★:</span><span>${Math.round(tb.b0).toLocaleString()}</span></div>`:''}
 
-      <!-- 合計 -->
-      <div style="border-top:2px solid #000;margin:4px 0;"></div>
-      <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:900;">
+      <div style="border-top:2.5px solid #000;margin:4px 0;"></div>
+      <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:900;">
         <span>${isReturn?'返品合計':'税込合計'}</span>
         <span>¥${Math.round(tb.total).toLocaleString()}</span>
       </div>
 
-      <!-- フッター -->
-      <div style="border-top:1px dashed #000;margin:6px 0 3px;font-size:10px;text-align:center;color:#666;">
+      <div style="border-top:1px dashed #000;margin:6px 0 3px;font-size:11px;text-align:center;color:#666;">
         ☆軽減税率(8%) ★非課税　伝票No: ${genNo('D')}
       </div>
     </div>`;
@@ -4096,46 +4059,39 @@ function genReceiptDoc(data,co){
     </div>`;
 
   if(currentPrintMode==='handy'){
-    // ハンディ版: 横向き（landscape）TECシステムと同じレイアウト
-    // 58mm幅を横向きに使用 → 約130mm幅 × 52mm高さ
-    return`<div class="doc-preview receipt-landscape" style="width:128mm;min-height:50mm;font-family:'Noto Sans JP',sans-serif;background:white;padding:6px 10px;box-sizing:border-box;">
+    // ハンディ版: 横向きレイアウト（TECと同じ）
+    // ※印刷時はprintToSII内でcanvasを90度回転して縦向きPDFに収める
+    return`<div class="doc-preview receipt-landscape" id="receiptHandyContent" style="width:126mm;font-family:'Noto Sans JP',sans-serif;background:white;padding:8px 12px;box-sizing:border-box;">
 
       <!-- タイトル行 -->
-      <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px;">
-        <div style="font-size:22px;font-weight:900;letter-spacing:8px;">領　収　書</div>
-        <div style="text-align:right;font-size:10px;color:#555;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2.5px solid #000;padding-bottom:5px;margin-bottom:7px;">
+        <div style="font-size:24px;font-weight:900;letter-spacing:8px;">領　収　書</div>
+        <div style="text-align:right;font-size:11px;color:#555;line-height:1.7;">
           <div>${fmtDateJP(date)}</div>
-          <div style="font-size:9px;margin-top:1px;">伝票No: ${no}</div>
+          <div style="font-size:10px;">伝票No: ${no}</div>
         </div>
       </div>
 
-      <!-- メイン: 顧客名・金額・印鑑 -->
-      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:6px;">
-
-        <!-- 左: 顧客名・但し書き・領収文言 -->
+      <!-- メイン -->
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:7px;">
+        <!-- 左: 顧客・但し書き -->
         <div style="flex:1;min-width:0;">
-          <div style="font-size:17px;font-weight:700;border-bottom:1.5px solid #333;padding-bottom:3px;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-            ${c.name}　様
-          </div>
-          <div style="font-size:12px;margin-bottom:2px;">但し、${note||'商品代として'}</div>
-          <div style="font-size:11px;color:#555;">上記正に領収致しました。</div>
+          <div style="font-size:19px;font-weight:700;border-bottom:1.5px solid #333;padding-bottom:4px;margin-bottom:5px;">${c.name}　様</div>
+          <div style="font-size:13px;margin-bottom:2px;">但し、${note||'商品代として'}</div>
+          <div style="font-size:12px;color:#555;">上記正に領収致しました。</div>
         </div>
-
-        <!-- 中: 金額 -->
+        <!-- 右: 金額 -->
         <div style="text-align:right;flex-shrink:0;">
-          <div style="font-size:10px;color:#888;margin-bottom:2px;">ご領収金額</div>
-          <div style="font-size:24px;font-weight:900;letter-spacing:1px;white-space:nowrap;">¥${Math.round(amt).toLocaleString()}－</div>
-          <div style="font-size:10px;color:#555;margin-top:2px;">（${method}）</div>
+          <div style="font-size:11px;color:#888;margin-bottom:2px;">ご領収金額</div>
+          <div style="font-size:26px;font-weight:900;white-space:nowrap;">¥${Math.round(amt).toLocaleString()}－</div>
+          <div style="font-size:11px;color:#555;margin-top:2px;">（${method}）</div>
         </div>
-
-        <!-- 右: 印鑑欄 -->
-        <div style="width:18mm;height:18mm;border:1.5px solid #888;display:flex;align-items:center;justify-content:center;font-size:10px;color:#888;flex-shrink:0;text-align:center;line-height:2;">
-          印<br>鑑
-        </div>
+        <!-- 印鑑欄 -->
+        <div style="width:20mm;height:20mm;border:1.5px solid #888;display:flex;align-items:center;justify-content:center;font-size:11px;color:#888;flex-shrink:0;text-align:center;line-height:2;">印<br>鑑</div>
       </div>
 
-      <!-- 下段: 会社情報 -->
-      <div style="border-top:1px solid #ccc;padding-top:4px;font-size:9px;color:#444;line-height:1.7;">
+      <!-- 会社情報 -->
+      <div style="border-top:1px solid #ccc;padding-top:4px;font-size:10px;color:#444;line-height:1.8;">
         <span style="font-weight:700;">${co.name||''}</span>
         ${co.addr?`　${co.addr}`:''}
         ${co.tel?`　TEL: ${co.tel}`:''}
