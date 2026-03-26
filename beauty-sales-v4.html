@@ -3687,8 +3687,7 @@ function showDocModal(){
 
 // =============================================
 // =============================================
-// MP-B20 印刷（html2canvas + jsPDF）
-// 220px固定幅でキャプチャ → 58mm縦向きPDF
+// MP-B20 印刷（html2canvas + jsPDF）220px固定幅キャプチャ
 // =============================================
 function handlePrint(){
   const co=getCo();
@@ -3728,7 +3727,7 @@ async function printToSII(){
     const {jsPDF}=window.jspdf;
     const sourceEl=el.querySelector('.doc-preview')||el.querySelector('div')||el;
 
-    // 220px固定幅でキャプチャ（58mm実寸・画面サイズ非依存）
+    // 220px固定幅でキャプチャ（58mm実寸・画面幅非依存）
     const PRINT_W=220;
     const prevW=sourceEl.style.width;
     const prevMaxW=sourceEl.style.maxWidth;
@@ -3744,14 +3743,12 @@ async function printToSII(){
     sourceEl.style.width=prevW;
     sourceEl.style.maxWidth=prevMaxW;
 
-    // 縦向き58mm幅PDF
     const mL=2,mT=3,imgW=54;
     const imgH=(canvas.height/canvas.width)*imgW;
     const pageH=Math.max(60,imgH+mT+4);
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
     doc.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',mL,mT,imgW,imgH);
 
-    // SII Print Agent送信
     const b64=doc.output('datauristring').split(',')[1];
     const url='siiprintagent://1.0/print?Format=pdf'
       +'&Data='+encodeURIComponent(b64)
@@ -3854,58 +3851,93 @@ function genDeliveryDoc(d,c,dateStr,co){
   // ===== HANDY VERSION (58mm レシートプリンター) =====
   if(currentPrintMode==='handy'){
     const taxLabel = i => i.taxRate===8?' ☆':i.taxRate===0?' ★':'';
-    // 幅220px固定・padding左右4px（物理的最小）・全行15px以上
-    return`<div class="doc-preview" style="width:220px;font-family:'Noto Sans JP',sans-serif;background:white;padding:5px 4px;line-height:1.85;">
+    // 品名番号付け用カウンター（値引き行は除く）
+    let itemNo = 0;
 
-      <div style="text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;margin-bottom:2px;">${isReturn?'返品書':'納品書'}</div>
-      <div style="text-align:center;font-size:17px;font-weight:700;">${co.name||''}</div>
-      ${co.tel?`<div style="text-align:center;font-size:16px;">TEL: ${co.tel}</div>`:''}
-      ${co.invoiceNo?`<div style="text-align:center;font-size:15px;">登録番号: ${co.invoiceNo}</div>`:''}
-      <div style="border-top:2px solid #000;margin:5px 0 4px;"></div>
+    return`<div class="doc-preview" style="width:220px;font-family:'Noto Sans JP',sans-serif;background:white;padding:0 0 6px 0;line-height:1.5;">
 
-      <div style="font-size:16px;">${dateStr}</div>
-      <div style="font-weight:700;font-size:19px;line-height:1.4;">${c.name} 御中</div>
-      <div style="font-size:16px;color:#444;margin-bottom:2px;">${saleTypeLabel[d.saleType]||''}</div>
-      <div style="border-top:1px dashed #000;margin:4px 0;"></div>
+      <!-- ① ダーク帯タイトル -->
+      <div style="background:#1a1a2e;color:white;text-align:center;padding:7px 4px;font-size:22px;font-weight:900;letter-spacing:3px;">
+        ${isReturn?'返 品 書':'納 品 書'}
+      </div>
 
-      <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;border-bottom:1.5px solid #000;padding-bottom:2px;margin-bottom:2px;">
+      <!-- ② 日付（右寄せ） -->
+      <div style="text-align:right;font-size:16px;padding:4px 6px 2px;">
+        ${dateStr}
+      </div>
+
+      <!-- ③ 顧客名 + 下線 -->
+      <div style="font-size:19px;font-weight:700;border-bottom:2px solid #000;padding:0 6px 4px;margin-bottom:3px;">
+        ${c.name}　御中
+      </div>
+
+      <!-- ④ 会社情報（行間詰め・各1行） -->
+      <div style="padding:0 6px;line-height:1.55;">
+        <div style="font-size:17px;font-weight:700;">${co.name||''}</div>
+        ${co.addr?`<div style="font-size:15px;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
+        ${co.tel?`<div style="font-size:15px;">TEL: ${co.tel}</div>`:''}
+        ${co.fax?`<div style="font-size:15px;">FAX: ${co.fax}</div>`:''}
+        ${co.invoiceNo?`<div style="font-size:15px;">登録番号: ${co.invoiceNo}</div>`:''}
+        <div style="font-size:15px;">下記の通り納品いたしました</div>
+      </div>
+
+      <!-- ⑤ 売上区分 -->
+      <div style="font-size:15px;padding:3px 6px 0;">${saleTypeLabel[d.saleType]||''}</div>
+
+      <!-- ⑥ 破線区切り -->
+      <div style="border-top:1.5px dashed #000;margin:5px 4px 4px;"></div>
+
+      <!-- ⑦ 商品列ヘッダー -->
+      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#333;padding:0 4px;border-bottom:1.5px solid #000;padding-bottom:2px;margin-bottom:1px;">
         <span style="flex:1;">品名</span>
         <span style="width:20px;text-align:right;">数</span>
         <span style="width:48px;text-align:right;">単価</span>
         <span style="width:54px;text-align:right;">税込</span>
       </div>
 
-      ${items.map(i => i.isDiscount ? `
-        <div style="font-size:15px;color:#856404;display:flex;justify-content:space-between;padding:1px 0;">
-          <span style="flex:1;">▲${i.name||'値引き'}</span>
-          <span style="width:54px;text-align:right;font-weight:700;">▲${Math.round(Math.abs(i.price||0)).toLocaleString()}</span>
-        </div>` : `
-        <div style="padding:3px 0;border-bottom:1px dotted #ccc;">
-          <div style="font-size:16px;font-weight:700;">${i.name}${taxLabel(i)}</div>
-          <div style="display:flex;justify-content:space-between;font-size:15px;">
-            <span style="flex:1;"></span>
-            <span style="width:20px;text-align:right;">${i.qty}</span>
-            <span style="width:48px;text-align:right;">${Math.round(i.price).toLocaleString()}</span>
-            <span style="width:54px;text-align:right;font-weight:700;">${Math.round(i.total).toLocaleString()}</span>
-          </div>
-        </div>`
-      ).join('')}
+      <!-- ⑧ 商品行 （品名にナンバリング、行間詰め、商品ごと破線） -->
+      <div style="padding:0 4px;">
+      ${items.map(i => {
+        if(i.isDiscount){
+          return`<div style="font-size:15px;color:#856404;display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed #bbb;">
+            <span style="flex:1;">▲${i.name||'値引き'}</span>
+            <span style="width:54px;text-align:right;font-weight:700;">▲${Math.round(Math.abs(i.price||0)).toLocaleString()}</span>
+          </div>`;
+        } else {
+          itemNo++;
+          return`<div style="padding:3px 0;border-bottom:1px dashed #999;">
+            <div style="font-size:15px;font-weight:700;line-height:1.4;">${itemNo}. ${i.name}${taxLabel(i)}</div>
+            <div style="display:flex;justify-content:space-between;font-size:15px;line-height:1.4;">
+              <span style="flex:1;"></span>
+              <span style="width:20px;text-align:right;">${i.qty}</span>
+              <span style="width:48px;text-align:right;">${Math.round(i.price).toLocaleString()}</span>
+              <span style="width:54px;text-align:right;font-weight:700;">${Math.round(i.total).toLocaleString()}</span>
+            </div>
+          </div>`;
+        }
+      }).join('')}
+      </div>
 
-      <div style="border-top:2px solid #000;margin:5px 0 3px;"></div>
-      ${tb.b10?`<div style="display:flex;justify-content:space-between;font-size:15px;color:#444;"><span>10%対象 税抜:</span><span>${Math.round(tb.b10).toLocaleString()}</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:15px;color:#444;"><span>　消費税(10%):</span><span>${Math.round(tb.t10).toLocaleString()}</span></div>`:''}
-      ${tb.b8?`<div style="display:flex;justify-content:space-between;font-size:15px;color:#444;"><span>8%対象☆ 税抜:</span><span>${Math.round(tb.b8).toLocaleString()}</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:15px;color:#444;"><span>　消費税(8%):</span><span>${Math.round(tb.t8).toLocaleString()}</span></div>`:''}
-      ${tb.b0?`<div style="display:flex;justify-content:space-between;font-size:15px;color:#444;"><span>非課税★:</span><span>${Math.round(tb.b0).toLocaleString()}</span></div>`:''}
+      <!-- ⑨ 税内訳 -->
+      <div style="border-top:2px solid #000;margin:4px 4px 2px;"></div>
+      <div style="padding:0 4px;">
+      ${tb.b10?`<div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>10%対象 税抜:</span><span>${Math.round(tb.b10).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>　消費税(10%):</span><span>${Math.round(tb.t10).toLocaleString()}</span></div>`:''}
+      ${tb.b8?`<div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>8%対象☆ 税抜:</span><span>${Math.round(tb.b8).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>　消費税(8%):</span><span>${Math.round(tb.t8).toLocaleString()}</span></div>`:''}
+      ${tb.b0?`<div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>非課税★:</span><span>${Math.round(tb.b0).toLocaleString()}</span></div>`:''}
+      </div>
 
-      <div style="border-top:2.5px solid #000;margin:4px 0;"></div>
-      <div style="display:flex;justify-content:space-between;font-size:21px;font-weight:900;">
+      <!-- ⑩ 合計 -->
+      <div style="border-top:2.5px solid #000;margin:3px 4px;"></div>
+      <div style="display:flex;justify-content:space-between;font-size:21px;font-weight:900;padding:0 4px;">
         <span>${isReturn?'返品合計':'税込合計'}</span>
         <span>¥${Math.round(tb.total).toLocaleString()}</span>
       </div>
 
-      <div style="border-top:1px dashed #000;margin:5px 0 2px;font-size:15px;text-align:center;color:#444;">
-        ☆軽減税率(8%) ★非課税<br>伝票No: ${genNo('D')}
+      <!-- ⑪ フッター -->
+      <div style="border-top:1px dashed #000;margin:5px 4px 2px;font-size:14px;text-align:center;color:#555;">
+        ☆軽減税率(8%) ★非課税　伝票No: ${genNo('D')}
       </div>
     </div>`;
   }
@@ -4031,51 +4063,97 @@ function genReceiptDoc(data,co){
     </div>`;
 
   if(currentPrintMode==='handy'){
-    // PC正式版をベースに58mm幅縦型レシートとして再設計
-    // 幅220px固定・全フォント15px以上・収入印紙枠付き
-    return`<div class="doc-preview" style="width:220px;font-family:'Noto Sans JP',sans-serif;background:white;padding:6px 5px;line-height:1.9;">
+    // ハンディ版: 横向き 130mm×58mm（ロール紙58mm幅・landscape想定）
+    // レイアウト順（上から）:
+    //   ① タイトル「領収書」中央上部 ＋ 右に日付
+    //   ② 顧客名（大きめ）
+    //   ③ 領収金額（最大サイズ）
+    //   ④ 但し書き
+    //   ⑤ 上記正に領収致しました
+    //   ⑥ 下段左: 会社情報 ／ 右: 収入印紙欄
+    return`<div style="
+        width:130mm;
+        font-family:'Noto Sans JP','MS Gothic',sans-serif;
+        background:white;
+        border:1px solid #bbb;
+        box-sizing:border-box;
+        padding:0;
+      ">
 
-      <!-- ヘッダー帯（PC正式版のダーク帯をレシート向けに） -->
-      <div style="background:#1a1a2e;color:white;padding:6px 8px;margin:-6px -5px 8px -5px;display:flex;justify-content:space-between;align-items:center;">
-        <div style="font-size:20px;font-weight:900;letter-spacing:3px;">領　収　書</div>
-        <div style="font-size:13px;opacity:.85;text-align:right;line-height:1.6;">
-          <div>${fmtDateJP(date)}</div>
-          <div style="font-size:12px;opacity:.7;">No. ${no}</div>
+      <!-- ① タイトル行 -->
+      <div style="
+        display:flex;
+        justify-content:center;
+        align-items:baseline;
+        gap:16px;
+        padding:8px 14px 6px 14px;
+        border-bottom:2px solid #222;
+        position:relative;
+      ">
+        <div style="font-size:22px;font-weight:900;letter-spacing:8px;">領　収　書</div>
+        <div style="font-size:10px;color:#444;position:absolute;right:14px;bottom:8px;">${fmtDateJP(date)}</div>
+      </div>
+
+      <!-- ② 顧客名 -->
+      <div style="padding:8px 14px 4px 14px;">
+        <div style="font-size:18px;font-weight:700;border-bottom:1.5px solid #444;padding-bottom:4px;display:inline-block;min-width:60mm;">
+          ${c.name}　様
         </div>
       </div>
 
-      <!-- 宛先 -->
-      <div style="font-size:18px;font-weight:700;border-bottom:2px solid #1a1a2e;padding-bottom:4px;margin-bottom:6px;word-break:break-all;">
-        ${c.name}　様
-      </div>
-
-      <!-- 金額ブロック -->
-      <div style="border:2px solid #1a1a2e;margin-bottom:7px;">
-        <div style="background:#1a1a2e;color:white;padding:3px 8px;font-size:15px;font-weight:700;letter-spacing:2px;">金　　額</div>
-        <div style="padding:5px 8px;font-size:28px;font-weight:900;white-space:nowrap;">
+      <!-- ③ 領収金額 -->
+      <div style="padding:6px 14px 4px 14px;">
+        <div style="font-size:10px;color:#888;margin-bottom:2px;">ご領収金額</div>
+        <div style="font-size:32px;font-weight:900;letter-spacing:2px;line-height:1.1;">
           ¥${Math.round(amt).toLocaleString()}－
         </div>
       </div>
 
-      <!-- 但し書き -->
-      <div style="font-size:16px;margin-bottom:2px;">但し、${note||'商品代として'}</div>
-      <div style="font-size:15px;color:#444;margin-bottom:2px;">お支払方法：${method}</div>
-      <div style="font-size:15px;color:#444;border-bottom:1px solid #ccc;padding-bottom:6px;margin-bottom:6px;">上記正に領収致しました。</div>
+      <!-- ④ 但し書き -->
+      <div style="padding:4px 14px 2px 14px;font-size:12px;">
+        但し、${note||'商品代として'}
+      </div>
 
-      <!-- 会社情報 + 収入印紙枠 -->
-      <div style="display:flex;align-items:flex-start;gap:5px;">
+      <!-- ⑤ 上記正に領収 -->
+      <div style="padding:3px 14px 8px 14px;font-size:11px;color:#555;">
+        上記正に領収致しました
+      </div>
+
+      <!-- ⑥ 下段: 会社情報 ＋ 収入印紙欄 -->
+      <div style="
+        border-top:1px solid #bbb;
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-end;
+        padding:7px 14px;
+        background:#fafafa;
+      ">
         <!-- 左: 会社情報 -->
-        <div style="flex:1;font-size:15px;line-height:1.8;">
-          <div style="font-weight:700;font-size:16px;">${co.name||''}</div>
-          ${co.addr?`<div style="word-break:break-all;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
+        <div style="font-size:9px;color:#333;line-height:1.8;flex:1;">
+          ${co.addr?`<div>${co.addr}</div>`:''}
+          <div style="font-weight:700;font-size:11px;">${co.name||''}</div>
           ${co.tel?`<div>TEL: ${co.tel}</div>`:''}
-          ${co.invoiceNo?`<div>登録番号:</div><div style="word-break:break-all;">${co.invoiceNo}</div>`:''}
+          ${co.invoiceNo?`<div>登録番号: ${co.invoiceNo}</div>`:''}
+          <div style="color:#888;">伝票No: ${no}</div>
         </div>
-        <!-- 右: 収入印紙枠 -->
-        <div style="flex-shrink:0;text-align:center;">
-          <div style="width:52px;height:52px;border:2px solid #555;display:flex;align-items:center;justify-content:center;font-size:13px;color:#555;line-height:1.7;font-weight:600;">
-            収入<br>印紙
-          </div>
+        <!-- 右: 収入印紙欄 -->
+        <div style="
+          width:22mm;
+          height:22mm;
+          border:1.5px solid #888;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          font-size:10px;
+          color:#888;
+          margin-left:10px;
+          flex-shrink:0;
+          text-align:center;
+          line-height:1.6;
+          border-radius:2px;
+        ">
+          収　入<br>印　紙
         </div>
       </div>
 
