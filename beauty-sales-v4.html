@@ -3687,7 +3687,7 @@ function showDocModal(){
 
 // =============================================
 // =============================================
-// MP-B20 印刷（html2canvas + jsPDF）220px固定幅キャプチャ
+// MP-B20 印刷（html2canvas + jsPDF）220px固定幅
 // =============================================
 function handlePrint(){
   const co=getCo();
@@ -3851,18 +3851,17 @@ function genDeliveryDoc(d,c,dateStr,co){
   // ===== HANDY VERSION (58mm レシートプリンター) =====
   if(currentPrintMode==='handy'){
     const taxLabel = i => i.taxRate===8?' ☆':i.taxRate===0?' ★':'';
-    // 品名番号付け用カウンター（値引き行は除く）
     let itemNo = 0;
 
     return`<div class="doc-preview" style="width:220px;font-family:'Noto Sans JP',sans-serif;background:white;padding:0 0 6px 0;line-height:1.5;">
 
-      <!-- ① ダーク帯タイトル -->
-      <div style="background:#1a1a2e;color:white;text-align:center;padding:7px 4px;font-size:22px;font-weight:900;letter-spacing:3px;">
-        ${isReturn?'返 品 書':'納 品 書'}
+      <!-- ① タイトル: カッコ表示（ダーク帯なし・インク節約） -->
+      <div style="text-align:center;font-size:22px;font-weight:900;padding:7px 4px 5px;letter-spacing:2px;">
+        ${isReturn?'【返 品 書】':'【納 品 書】'}
       </div>
 
       <!-- ② 日付（右寄せ） -->
-      <div style="text-align:right;font-size:16px;padding:4px 6px 2px;">
+      <div style="text-align:right;font-size:16px;padding:2px 6px 2px;">
         ${dateStr}
       </div>
 
@@ -3884,28 +3883,34 @@ function genDeliveryDoc(d,c,dateStr,co){
       <!-- ⑤ 売上区分 -->
       <div style="font-size:15px;padding:3px 6px 0;">${saleTypeLabel[d.saleType]||''}</div>
 
-      <!-- ⑥ 破線区切り -->
-      <div style="border-top:1.5px dashed #000;margin:5px 4px 4px;"></div>
+      <!-- ⑥ 破線区切り（border-top方式・印刷対応） -->
+      <div style="border-top:1px dashed #000;margin:5px 4px 4px;"></div>
 
       <!-- ⑦ 商品列ヘッダー -->
-      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#333;padding:0 4px;border-bottom:1.5px solid #000;padding-bottom:2px;margin-bottom:1px;">
+      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#333;padding:0 4px;margin-bottom:1px;">
         <span style="flex:1;">品名</span>
         <span style="width:20px;text-align:right;">数</span>
         <span style="width:48px;text-align:right;">単価</span>
         <span style="width:54px;text-align:right;">税込</span>
       </div>
+      <div style="border-top:1.5px solid #000;margin:0 4px 0;"></div>
 
-      <!-- ⑧ 商品行 （品名にナンバリング、行間詰め、商品ごと破線） -->
+      <!-- ⑧ 商品行（各商品の仕切りはborder-top:dashed #000で印刷対応） -->
       <div style="padding:0 4px;">
-      ${items.map(i => {
+      ${items.map((i,idx) => {
         if(i.isDiscount){
-          return`<div style="font-size:15px;color:#856404;display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed #bbb;">
-            <span style="flex:1;">▲${i.name||'値引き'}</span>
-            <span style="width:54px;text-align:right;font-weight:700;">▲${Math.round(Math.abs(i.price||0)).toLocaleString()}</span>
+          // 値引き行：前にborder-top破線
+          return`<div style="border-top:1px dashed #000;margin-top:0;padding:3px 0;">
+            <div style="font-size:15px;color:#856404;display:flex;justify-content:space-between;">
+              <span style="flex:1;">▲${i.name||'値引き'}</span>
+              <span style="width:54px;text-align:right;font-weight:700;">▲${Math.round(Math.abs(i.price||0)).toLocaleString()}</span>
+            </div>
           </div>`;
         } else {
           itemNo++;
-          return`<div style="padding:3px 0;border-bottom:1px dashed #999;">
+          // 2件目以降は前にborder-top破線（1件目は区切り不要）
+          const sep = idx>0 ? 'border-top:1px dashed #000;' : '';
+          return`<div style="${sep}padding:3px 0;">
             <div style="font-size:15px;font-weight:700;line-height:1.4;">${itemNo}. ${i.name}${taxLabel(i)}</div>
             <div style="display:flex;justify-content:space-between;font-size:15px;line-height:1.4;">
               <span style="flex:1;"></span>
@@ -3935,8 +3940,8 @@ function genDeliveryDoc(d,c,dateStr,co){
         <span>¥${Math.round(tb.total).toLocaleString()}</span>
       </div>
 
-      <!-- ⑪ フッター -->
-      <div style="border-top:1px dashed #000;margin:5px 4px 2px;font-size:14px;text-align:center;color:#555;">
+      <!-- ⑪ フッター（border-top:dashed #000 ← 印刷OK実績あり） -->
+      <div style="border-top:1px dashed #000;margin:5px 4px 2px;font-size:14px;text-align:center;color:#444;">
         ☆軽減税率(8%) ★非課税　伝票No: ${genNo('D')}
       </div>
     </div>`;
