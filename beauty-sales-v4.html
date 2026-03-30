@@ -3689,8 +3689,7 @@ function showDocModal(){
 // =============================================
 // MP-B20 印刷（html2canvas + jsPDF）
 // ・納品書: 220px縦型 scale:3 → 縦向き58mmPDF
-// ・領収書: 6600px横長 scale:1 → -90度回転 → 縦向き58mmPDF（横向き印刷・約13cm）
-//   印刷長さ = (6600 / コンテンツ高さ) × 54mm ≈ 130mm(13cm)
+// ・領収書: 11300px横長 scale:1 → -90度回転 → 縦向き58mmPDF（横向き印刷・約13cm）
 // =============================================
 function handlePrint(){
   const co=getCo();
@@ -3732,7 +3731,7 @@ async function printToSII(){
     const isReceiptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
     let doc;
     if(isReceiptHandy){
-      const RECEIPT_W=6600;
+      const RECEIPT_W=11300;
       const prevW=sourceEl.style.width;
       const prevMaxW=sourceEl.style.maxWidth;
       sourceEl.style.width=RECEIPT_W+'px';
@@ -3740,7 +3739,7 @@ async function printToSII(){
       const canvas=await html2canvas(sourceEl,{
         scale:1,useCORS:true,allowTaint:true,
         backgroundColor:'#ffffff',logging:false,
-        width:RECEIPT_W,windowWidth:RECEIPT_W+120,scrollX:0,scrollY:0,
+        width:RECEIPT_W,windowWidth:RECEIPT_W+200,scrollX:0,scrollY:0,
       });
       sourceEl.style.width=prevW;
       sourceEl.style.maxWidth=prevMaxW;
@@ -4042,46 +4041,45 @@ function genReceiptDoc(data,co){
     </div>`;
 
   if(currentPrintMode==='handy'){
-    // 横向き印刷用: 6600px幅, scale:1
-    // 印刷長さ = (6600 / コンテンツ高さ) × 54mm ≈ 130mm(13cm)
-    // white-space:nowrap で折り返しなし → 高さを最小化
-    return`<div class="doc-preview" style="width:6600px;font-family:'Noto Sans JP',sans-serif;background:white;padding:60px 80px;line-height:1.5;">
+    // 横向き印刷用: 11300px幅, scale:1
+    // フォントを日付=顧客名サイズ基準で1.713倍アップ
+    // 印刷長さ = (11300 / コンテンツ高さ) × 54mm ≈ 130mm(13cm)
+    return`<div class="doc-preview" style="width:11300px;font-family:'Noto Sans JP',sans-serif;background:white;padding:100px 140px;line-height:1.5;">
 
-      <!-- 行1: タイトル（中央）+ 日付（右） -->
-      <div style="display:flex;align-items:flex-end;border-bottom:8px solid #000;padding-bottom:22px;margin-bottom:24px;">
-        <div style="flex:1;text-align:center;font-size:205px;font-weight:900;letter-spacing:30px;white-space:nowrap;">領　収　書</div>
-        <div style="font-size:94px;color:#333;white-space:nowrap;padding-bottom:6px;">${fmtDateJP(date)}</div>
+      <!-- 行1: タイトル（中央）+ 日付（右）同行 -->
+      <div style="display:flex;align-items:flex-end;border-bottom:14px solid #000;padding-bottom:36px;margin-bottom:40px;">
+        <div style="flex:1;text-align:center;font-size:351px;font-weight:900;letter-spacing:50px;white-space:nowrap;">領　収　書</div>
+        <div style="font-size:161px;color:#333;white-space:nowrap;padding-bottom:10px;">${fmtDateJP(date)}</div>
       </div>
 
       <!-- 行2: 顧客名（左・アンダーライン）+ 収入印紙（右） -->
-      <div style="display:flex;align-items:flex-start;gap:40px;margin-bottom:20px;">
-        <div style="flex:1;font-size:161px;font-weight:700;border-bottom:5px solid #000;padding-bottom:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}　様</div>
-        <div style="width:320px;height:320px;border:7px solid #333;display:flex;align-items:center;justify-content:center;font-size:90px;font-weight:700;color:#333;flex-shrink:0;text-align:center;line-height:1.8;">収入<br>印紙</div>
+      <div style="display:flex;align-items:flex-start;gap:70px;margin-bottom:34px;">
+        <div style="flex:1;font-size:276px;font-weight:700;border-bottom:8px solid #000;padding-bottom:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}　様</div>
+        <div style="width:548px;height:548px;border:12px solid #333;display:flex;align-items:center;justify-content:center;font-size:154px;font-weight:700;color:#333;flex-shrink:0;text-align:center;line-height:1.8;">収入<br>印紙</div>
       </div>
 
       <!-- 行3: 金額（アンダーライン） -->
-      <div style="font-size:234px;font-weight:900;white-space:nowrap;border-bottom:5px solid #000;padding-bottom:14px;margin-bottom:20px;">¥${Math.round(amt).toLocaleString()}－</div>
+      <div style="font-size:401px;font-weight:900;white-space:nowrap;border-bottom:8px solid #000;padding-bottom:22px;margin-bottom:34px;">¥${Math.round(amt).toLocaleString()}－</div>
 
       <!-- 行4: 但し書き・上記正に -->
-      <div style="font-size:117px;white-space:nowrap;margin-bottom:8px;">但し、${note||'商品代として'}</div>
-      <div style="font-size:104px;color:#444;border-bottom:4px solid #ccc;padding-bottom:22px;margin-bottom:22px;white-space:nowrap;">上記正に領収致しました。</div>
+      <div style="font-size:200px;white-space:nowrap;margin-bottom:14px;">但し、${note||'商品代として'}</div>
+      <div style="font-size:178px;color:#444;border-bottom:6px solid #ccc;padding-bottom:36px;margin-bottom:36px;white-space:nowrap;">上記正に領収致しました。</div>
 
       <!-- 行5: 会社情報（左）+ 伝票No（右） -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:40px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:70px;">
         <div style="line-height:1.65;">
-          <div style="font-size:117px;font-weight:700;white-space:nowrap;">${co.name||''}</div>
-          ${co.addr?`<div style="font-size:91px;white-space:nowrap;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
-          ${co.tel?`<div style="font-size:91px;white-space:nowrap;">TEL: ${co.tel}</div>`:''}
-          ${co.invoiceNo?`<div style="font-size:91px;white-space:nowrap;">登録番号: ${co.invoiceNo}</div>`:''}
+          <div style="font-size:200px;font-weight:700;white-space:nowrap;">${co.name||''}</div>
+          ${co.addr?`<div style="font-size:156px;white-space:nowrap;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
+          ${co.tel?`<div style="font-size:156px;white-space:nowrap;">TEL: ${co.tel}</div>`:''}
+          ${co.invoiceNo?`<div style="font-size:156px;white-space:nowrap;">登録番号: ${co.invoiceNo}</div>`:''}
         </div>
-        <div style="font-size:91px;color:#555;text-align:right;white-space:nowrap;flex-shrink:0;">
+        <div style="font-size:156px;color:#555;text-align:right;white-space:nowrap;flex-shrink:0;">
           伝票No:<br>${no}
         </div>
       </div>
 
     </div>`;
   }
-
 
   // ===== PC FULL VERSION: A4縦・A5×2枚（上段:お客様渡し / 下段:控え）=====
   if(currentPrintMode!=='handy'){
