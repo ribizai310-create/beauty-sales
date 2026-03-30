@@ -3690,8 +3690,7 @@ function showDocModal(){
 // MP-B20 印刷（html2canvas + jsPDF）
 // ・納品書: 220px縦型 scale:3 → 縦向き58mmPDF
 // ・領収書: 6600px横長 scale:1 → -90度回転 → 縦向き58mmPDF（横向き印刷・約13cm）
-//   印刷長さ = (6600 / コンテンツ高さ) × 54mm
-//   6600 / 2738 × 54 ≈ 130mm(13cm)
+//   印刷長さ = (6600 / コンテンツ高さ) × 54mm ≈ 130mm(13cm)
 // =============================================
 function handlePrint(){
   const co=getCo();
@@ -3731,27 +3730,20 @@ async function printToSII(){
     const {jsPDF}=window.jspdf;
     const sourceEl=el.querySelector('.doc-preview')||el.querySelector('div')||el;
     const isReceiptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
-
     let doc;
-
     if(isReceiptHandy){
-      // 領収書: 6600px横長 scale:1 → -90度回転 → 縦向き58mmPDF（横向き約13cm）
       const RECEIPT_W=6600;
       const prevW=sourceEl.style.width;
       const prevMaxW=sourceEl.style.maxWidth;
       sourceEl.style.width=RECEIPT_W+'px';
       sourceEl.style.maxWidth=RECEIPT_W+'px';
-
       const canvas=await html2canvas(sourceEl,{
         scale:1,useCORS:true,allowTaint:true,
         backgroundColor:'#ffffff',logging:false,
         width:RECEIPT_W,windowWidth:RECEIPT_W+120,scrollX:0,scrollY:0,
       });
-
       sourceEl.style.width=prevW;
       sourceEl.style.maxWidth=prevMaxW;
-
-      // -90度回転: rot.width=canvas.height, rot.height=canvas.width
       const rot=document.createElement('canvas');
       rot.width=canvas.height;
       rot.height=canvas.width;
@@ -3759,45 +3751,36 @@ async function printToSII(){
       ctx.translate(rot.width/2,rot.height/2);
       ctx.rotate(-Math.PI/2);
       ctx.drawImage(canvas,-canvas.width/2,-canvas.height/2);
-
-      // imgH = (rot.height/rot.width)*54 = (canvas.width/canvas.height)*54 = (RECEIPT_W/コンテンツ高さ)*54
       const mL=2,mT=3,imgW=54;
       const imgH=(rot.height/rot.width)*imgW;
       const pageH=Math.max(54,imgH+mT+3);
       doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
       doc.addImage(rot.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
-
     }else{
-      // 納品書等: 220px縦型 scale:3 → 縦向き58mmPDF
       const PRINT_W=220;
       const prevW=sourceEl.style.width;
       const prevMaxW=sourceEl.style.maxWidth;
       sourceEl.style.width=PRINT_W+'px';
       sourceEl.style.maxWidth=PRINT_W+'px';
-
       const canvas=await html2canvas(sourceEl,{
         scale:3,useCORS:true,allowTaint:true,
         backgroundColor:'#ffffff',logging:false,
         width:PRINT_W,windowWidth:PRINT_W+30,scrollX:0,scrollY:0,
       });
-
       sourceEl.style.width=prevW;
       sourceEl.style.maxWidth=prevMaxW;
-
       const mL=2,mT=3,imgW=54;
       const imgH=(canvas.height/canvas.width)*imgW;
       const pageH=Math.max(60,imgH+mT+4);
       doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
       doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
     }
-
     const pdfBase64=doc.output('datauristring').split(',')[1];
     const url='siiprintagent://1.0/print?Format=pdf'
       +'&Data='+encodeURIComponent(pdfBase64)
       +'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
     if(url.length>3_500_000){alert('データが大きすぎます。通常印刷をお使いください。');return;}
     window.location.href=url;
-
   }catch(e){
     console.error('MP-B20印刷エラー:',e);
     alert('印刷エラー: '+e.message);
@@ -4061,23 +4044,22 @@ function genReceiptDoc(data,co){
   if(currentPrintMode==='handy'){
     // 横向き印刷用: 6600px幅, scale:1
     // 印刷長さ = (6600 / コンテンツ高さ) × 54mm ≈ 130mm(13cm)
-    // コンテンツ高さ推定: 約2738px → 130mm
-    // white-space:nowrap で折り返しなし → 高さを管理
+    // white-space:nowrap で折り返しなし → 高さを最小化
     return`<div class="doc-preview" style="width:6600px;font-family:'Noto Sans JP',sans-serif;background:white;padding:60px 80px;line-height:1.5;">
 
-      <!-- 行1: タイトル（中央）+ 日付（右）同行 -->
+      <!-- 行1: タイトル（中央）+ 日付（右） -->
       <div style="display:flex;align-items:flex-end;border-bottom:8px solid #000;padding-bottom:22px;margin-bottom:24px;">
         <div style="flex:1;text-align:center;font-size:205px;font-weight:900;letter-spacing:30px;white-space:nowrap;">領　収　書</div>
         <div style="font-size:94px;color:#333;white-space:nowrap;padding-bottom:6px;">${fmtDateJP(date)}</div>
       </div>
 
-      <!-- 行2: 顧客名（左）+ アンダーライン + 収入印紙（右） -->
+      <!-- 行2: 顧客名（左・アンダーライン）+ 収入印紙（右） -->
       <div style="display:flex;align-items:flex-start;gap:40px;margin-bottom:20px;">
         <div style="flex:1;font-size:161px;font-weight:700;border-bottom:5px solid #000;padding-bottom:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}　様</div>
         <div style="width:320px;height:320px;border:7px solid #333;display:flex;align-items:center;justify-content:center;font-size:90px;font-weight:700;color:#333;flex-shrink:0;text-align:center;line-height:1.8;">収入<br>印紙</div>
       </div>
 
-      <!-- 行3: 金額（左寄せ）+ アンダーライン -->
+      <!-- 行3: 金額（アンダーライン） -->
       <div style="font-size:234px;font-weight:900;white-space:nowrap;border-bottom:5px solid #000;padding-bottom:14px;margin-bottom:20px;">¥${Math.round(amt).toLocaleString()}－</div>
 
       <!-- 行4: 但し書き・上記正に -->
@@ -4099,6 +4081,7 @@ function genReceiptDoc(data,co){
 
     </div>`;
   }
+
 
   // ===== PC FULL VERSION: A4縦・A5×2枚（上段:お客様渡し / 下段:控え）=====
   if(currentPrintMode!=='handy'){
