@@ -3686,10 +3686,7 @@ function showDocModal(){
 }
 
 // =============================================
-// =============================================
-// MP-B20 印刷（html2canvas + jsPDF）
-// ・納品書: 220px縦型 scale:3 → 縦向き58mmPDF
-// ・領収書: 500px横長 scale:2 → -90度回転 → 縦向き58mmPDF（横向き約13cm）
+// Star MP-B20 WebPRNT 印刷
 // =============================================
 function handlePrint(){
   const co=getCo();
@@ -3713,7 +3710,7 @@ function loadScriptPromise(src){
     const ex=document.querySelector(`script[src="${src}"]`);
     if(ex){const ok=src.includes('jspdf')?typeof window.jspdf!=='undefined':typeof html2canvas!=='undefined';if(ok){resolve();return;}}
     const s=document.createElement('script');s.src=src;s.onload=resolve;
-    s.onerror=()=>reject(new Error('ライブラリ読み込み失敗。Wi-Fi確認。'));
+    s.onerror=()=>reject(new Error('ライブラリ読み込み失敗'));
     document.head.appendChild(s);
   });
 }
@@ -3729,28 +3726,36 @@ async function printToSII(){
     const {jsPDF}=window.jspdf;
     const isReceiptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
     let doc;
-
     if(isReceiptHandy){
-      // 領収書: doc-preview(500px横長)をscale:2でキャプチャ → -90度回転 → 縦向きPDF
-      const RECEIPT_W=500;
+      // 領収書: doc-preview(500px横長)をscale:2でキャプチャ→-90度回転→縦向きPDF
       const sourceEl=el.querySelector('.doc-preview');
-      if(!sourceEl){alert('印刷要素が見つかりません');return;}
-      // 現在の幅を強制設定
-      sourceEl.style.width=RECEIPT_W+'px';
-      sourceEl.style.maxWidth=RECEIPT_W+'px';
-      await new Promise(r=>setTimeout(r,50));
+      if(!sourceEl){alert('doc-previewが見つかりません');return;}
+      const W=500;
+      sourceEl.style.width=W+'px';
+      sourceEl.style.maxWidth=W+'px';
+      sourceEl.style.minWidth=W+'px';
+      await new Promise(r=>setTimeout(r,80));
       const canvas=await html2canvas(sourceEl,{
         scale:2,useCORS:true,allowTaint:true,
-        backgroundColor:'#ffffff',logging:false,
-        width:RECEIPT_W,windowWidth:800,
+        backgroundColor:'#ffffff',
+        width:W,windowWidth:800,
         x:0,y:0,scrollX:0,scrollY:0,
+        logging:false,
+        ignoreElements:(el)=>el.id==='siiPrintBtn'||el.id==='siiTestBtn',
       });
       sourceEl.style.width='';
       sourceEl.style.maxWidth='';
+      sourceEl.style.minWidth='';
+      // canvas確認
+      if(!canvas||canvas.width===0||canvas.height===0){
+        alert('キャプチャ失敗。通常印刷をお試しください。');return;
+      }
       // -90度回転
       const rot=document.createElement('canvas');
       rot.width=canvas.height; rot.height=canvas.width;
       const ctx=rot.getContext('2d');
+      ctx.fillStyle='#ffffff';
+      ctx.fillRect(0,0,rot.width,rot.height);
       ctx.translate(rot.width/2,rot.height/2);
       ctx.rotate(-Math.PI/2);
       ctx.drawImage(canvas,-canvas.width/2,-canvas.height/2);
@@ -3759,34 +3764,27 @@ async function printToSII(){
       const pageH=Math.max(54,imgH+mT+3);
       doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
       doc.addImage(rot.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
-
     }else{
-      // 納品書等: 220px縦型 scale:3
       const sourceEl=el.querySelector('.doc-preview')||el.querySelector('div')||el;
-      const PRINT_W=220;
-      const prevW=sourceEl.style.width;
-      const prevMaxW=sourceEl.style.maxWidth;
-      sourceEl.style.width=PRINT_W+'px';
-      sourceEl.style.maxWidth=PRINT_W+'px';
+      const W=220;
+      sourceEl.style.width=W+'px';
+      sourceEl.style.maxWidth=W+'px';
       const canvas=await html2canvas(sourceEl,{
         scale:3,useCORS:true,allowTaint:true,
-        backgroundColor:'#ffffff',logging:false,
-        width:PRINT_W,windowWidth:PRINT_W+30,scrollX:0,scrollY:0,
+        backgroundColor:'#ffffff',
+        width:W,windowWidth:W+30,scrollX:0,scrollY:0,logging:false,
       });
-      sourceEl.style.width=prevW;
-      sourceEl.style.maxWidth=prevMaxW;
+      sourceEl.style.width='';
+      sourceEl.style.maxWidth='';
       const mL=2,mT=3,imgW=54;
       const imgH=(canvas.height/canvas.width)*imgW;
       const pageH=Math.max(60,imgH+mT+4);
       doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
       doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
     }
-
-    const pdfBase64=doc.output('datauristring').split(',')[1];
-    const url='siiprintagent://1.0/print?Format=pdf'
-      +'&Data='+encodeURIComponent(pdfBase64)
-      +'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
-    if(url.length>3_500_000){alert('データが大きすぎます。');return;}
+    const b64=doc.output('datauristring').split(',')[1];
+    const url='siiprintagent://1.0/print?Format=pdf&Data='+encodeURIComponent(b64)+'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
+    if(url.length>3500000){alert('データが大きすぎます');return;}
     window.location.href=url;
   }catch(e){
     console.error('MP-B20印刷エラー:',e);
@@ -3849,7 +3847,7 @@ function renderDocContent(){
     const co2=getCo();
     const showSii=(co2.handyModel==='sii_mpb20'&&currentPrintMode==='handy');
     siiBtn.style.display=showSii?'inline-flex':'none';
-    if(siiTestBtn) siiTestBtn.style.display=showSii?'inline-flex':'none';
+    if(siiTestBtn)siiTestBtn.style.display=showSii?'inline-flex':'none';
   }
   const titles={delivery:'納品書',receipt:'領収書',invoice:'請求書',estimate:'見積書',daily:'日報',salesReport:'売上日報',payReport:'入金日報'};
   document.getElementById('docModalTitle').textContent=(titles[currentDocType]||'書類')+' プレビュー ('+(currentPrintMode==='handy'?'ハンディ版':'PC正式版')+')';
@@ -4047,20 +4045,18 @@ function genReceiptDoc(data,co){
     </div>`;
 
   if(currentPrintMode==='handy'){
-    // 領収書ハンディ版
-    // プレビュー: 横向き500px幅でそのまま表示（transform一切なし・白紙防止）
-    // 印刷: printToSIIがdoc-preview(500px)をscale:2でキャプチャ→-90度回転→58mmPDF
-    // 印刷長さ = (500 / コンテンツ高さ) × 54mm ≈ 130mm(13cm)
-    // ※コンテンツ高さ≈207pxになるようpaddingを最小化
-    return`<div class="doc-preview" style="width:500px;font-family:'Noto Sans JP',sans-serif;background:white;padding:6px 10px;line-height:1.35;overflow:hidden;">
+    // 領収書ハンディ版: 500px横長・transformなし
+    // printToSII: このdoc-previewをscale:2でキャプチャ→-90度回転→58mmPDF
+    // 印刷長さ = (500 / コンテンツ高さpx) × 54mm
+    return`<div class="doc-preview" style="width:500px;font-family:'Noto Sans JP',sans-serif;background:white;padding:6px 10px;line-height:1.35;">
 
       <!-- タイトル + 日付 -->
       <div style="display:flex;align-items:flex-end;border-bottom:2.5px solid #000;padding-bottom:5px;margin-bottom:6px;">
         <div style="flex:1;text-align:center;font-size:32px;font-weight:900;letter-spacing:6px;white-space:nowrap;">領　収　書</div>
-        <div style="font-size:14px;color:#333;white-space:nowrap;padding-bottom:1px;">${fmtDateJP(date)}</div>
+        <div style="font-size:14px;color:#333;white-space:nowrap;">${fmtDateJP(date)}</div>
       </div>
 
-      <!-- 顧客名（文字幅のみ下線） + 収入印紙 -->
+      <!-- 顧客名（文字幅のみ下線）+ 収入印紙 -->
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
         <div style="font-size:25px;font-weight:700;display:inline-block;border-bottom:2px solid #000;padding-bottom:3px;white-space:nowrap;">${c.name}　様</div>
         <div style="width:50px;height:50px;border:2.5px solid #333;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#333;flex-shrink:0;text-align:center;line-height:1.6;">収入<br>印紙</div>
