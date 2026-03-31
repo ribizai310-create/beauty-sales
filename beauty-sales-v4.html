@@ -3727,29 +3727,23 @@ async function printToSII(){
     const isReceiptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
     let doc;
     if(isReceiptHandy){
-      // 領収書: doc-preview(500px横長)をscale:2でキャプチャ→-90度回転→縦向きPDF
+      // 領収書: doc-preview(700px横長)をscale:2でキャプチャ→-90度回転→縦向きPDF
+      // 印刷長さ = (700 / コンテンツ高さ) × 54mm ≈ 131mm(13.1cm)
       const sourceEl=el.querySelector('.doc-preview');
       if(!sourceEl){alert('doc-previewが見つかりません');return;}
-      const W=500;
+      const W=700;
       sourceEl.style.width=W+'px';
       sourceEl.style.maxWidth=W+'px';
-      sourceEl.style.minWidth=W+'px';
       await new Promise(r=>setTimeout(r,80));
       const canvas=await html2canvas(sourceEl,{
         scale:2,useCORS:true,allowTaint:true,
         backgroundColor:'#ffffff',
-        width:W,windowWidth:800,
-        x:0,y:0,scrollX:0,scrollY:0,
-        logging:false,
-        ignoreElements:(el)=>el.id==='siiPrintBtn'||el.id==='siiTestBtn',
+        width:W,windowWidth:900,
+        x:0,y:0,scrollX:0,scrollY:0,logging:false,
       });
       sourceEl.style.width='';
       sourceEl.style.maxWidth='';
-      sourceEl.style.minWidth='';
-      // canvas確認
-      if(!canvas||canvas.width===0||canvas.height===0){
-        alert('キャプチャ失敗。通常印刷をお試しください。');return;
-      }
+      if(!canvas||canvas.width===0){alert('キャプチャ失敗');return;}
       // -90度回転
       const rot=document.createElement('canvas');
       rot.width=canvas.height; rot.height=canvas.width;
@@ -4045,41 +4039,41 @@ function genReceiptDoc(data,co){
     </div>`;
 
   if(currentPrintMode==='handy'){
-    // 領収書ハンディ版: 500px横長・transformなし
-    // printToSII: このdoc-previewをscale:2でキャプチャ→-90度回転→58mmPDF
-    // 印刷長さ = (500 / コンテンツ高さpx) × 54mm
-    return`<div class="doc-preview" style="width:500px;font-family:'Noto Sans JP',sans-serif;background:white;padding:6px 10px;line-height:1.35;">
+    // 領収書ハンディ版: 700px横長・transformなし
+    // printToSII: scale:2でキャプチャ→-90度回転→58mmPDF
+    // 印刷長さ = (700 / コンテンツ高さ約288px) × 54mm ≈ 131mm(13.1cm)
+    return`<div class="doc-preview" style="width:700px;font-family:'Noto Sans JP',sans-serif;background:white;padding:6px 14px;line-height:1.35;">
 
       <!-- タイトル + 日付 -->
       <div style="display:flex;align-items:flex-end;border-bottom:2.5px solid #000;padding-bottom:5px;margin-bottom:6px;">
-        <div style="flex:1;text-align:center;font-size:32px;font-weight:900;letter-spacing:6px;white-space:nowrap;">領　収　書</div>
-        <div style="font-size:14px;color:#333;white-space:nowrap;">${fmtDateJP(date)}</div>
+        <div style="flex:1;text-align:center;font-size:42px;font-weight:900;letter-spacing:8px;white-space:nowrap;">領　収　書</div>
+        <div style="font-size:18px;color:#333;white-space:nowrap;">${fmtDateJP(date)}</div>
       </div>
 
       <!-- 顧客名（文字幅のみ下線）+ 収入印紙 -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
-        <div style="font-size:25px;font-weight:700;display:inline-block;border-bottom:2px solid #000;padding-bottom:3px;white-space:nowrap;">${c.name}　様</div>
-        <div style="width:50px;height:50px;border:2.5px solid #333;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#333;flex-shrink:0;text-align:center;line-height:1.6;">収入<br>印紙</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;">
+        <div style="font-size:34px;font-weight:700;display:inline-block;border-bottom:2.5px solid #000;padding-bottom:3px;white-space:nowrap;">${c.name}　様</div>
+        <div style="width:66px;height:66px;border:2.5px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#333;flex-shrink:0;text-align:center;line-height:1.6;">収入<br>印紙</div>
       </div>
 
       <!-- 金額（中央・文字幅のみ下線） -->
       <div style="text-align:center;margin-bottom:6px;">
-        <span style="font-size:36px;font-weight:900;display:inline-block;border-bottom:2px solid #000;padding-bottom:3px;white-space:nowrap;">¥${Math.round(amt).toLocaleString()}－</span>
+        <span style="font-size:50px;font-weight:900;display:inline-block;border-bottom:2.5px solid #000;padding-bottom:3px;white-space:nowrap;">¥${Math.round(amt).toLocaleString()}－</span>
       </div>
 
       <!-- 但し書き・上記正に -->
-      <div style="font-size:14px;white-space:nowrap;margin-bottom:2px;">但し、${note||'商品代として'}</div>
-      <div style="font-size:13px;color:#444;border-bottom:1px solid #ccc;padding-bottom:5px;margin-bottom:5px;white-space:nowrap;">上記正に領収致しました。</div>
+      <div style="font-size:18px;white-space:nowrap;margin-bottom:2px;">但し、${note||'商品代として'}</div>
+      <div style="font-size:16px;color:#444;border-bottom:1px solid #ccc;padding-bottom:5px;margin-bottom:5px;white-space:nowrap;">上記正に領収致しました。</div>
 
       <!-- 会社情報 + 伝票No -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
         <div style="line-height:1.5;">
-          <div style="font-size:18px;font-weight:700;white-space:nowrap;">${co.name||''}</div>
-          ${co.addr?`<div style="font-size:13px;white-space:nowrap;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
-          ${co.tel?`<div style="font-size:13px;white-space:nowrap;">TEL: ${co.tel}</div>`:''}
-          ${co.invoiceNo?`<div style="font-size:13px;white-space:nowrap;">登録番号: ${co.invoiceNo}</div>`:''}
+          <div style="font-size:24px;font-weight:700;white-space:nowrap;">${co.name||''}</div>
+          ${co.addr?`<div style="font-size:16px;white-space:nowrap;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
+          ${co.tel?`<div style="font-size:16px;white-space:nowrap;">TEL: ${co.tel}</div>`:''}
+          ${co.invoiceNo?`<div style="font-size:16px;white-space:nowrap;">登録番号: ${co.invoiceNo}</div>`:''}
         </div>
-        <div style="font-size:13px;color:#555;text-align:right;white-space:nowrap;flex-shrink:0;">伝票No:<br>${no}</div>
+        <div style="font-size:16px;color:#555;text-align:right;white-space:nowrap;flex-shrink:0;">伝票No:<br>${no}</div>
       </div>
 
     </div>`;
