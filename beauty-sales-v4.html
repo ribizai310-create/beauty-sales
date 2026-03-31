@@ -3689,7 +3689,8 @@ function showDocModal(){
 // =============================================
 // MP-B20 印刷（html2canvas + jsPDF）
 // ・納品書: 220px縦型 scale:3 → 縦向き58mmPDF
-// ・領収書: 22600px横長 scale:1 → -90度回転 → 縦向き58mmPDF（横向き印刷・約13cm）
+// ・領収書: 22600px横長 scale:1 → -90度回転 → 縦向き58mmPDF（横向き約13cm）
+//   オフスクリーンdivでキャプチャ（transform:noneで白紙を防ぐ）
 // =============================================
 function handlePrint(){
   const co=getCo();
@@ -3729,31 +3730,33 @@ async function printToSII(){
     const {jsPDF}=window.jspdf;
     const isReceiptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
     let doc;
+
     if(isReceiptHandy){
+      // 領収書: receiptPreviewInnerの内容をそのままオフスクリーンdivにコピー
+      // transformなしでキャプチャ → 白紙にならない
+      const previewInner=document.getElementById('receiptPreviewInner');
+      if(!previewInner){alert('印刷要素が見つかりません');return;}
+
       const RECEIPT_W=22600;
-      const sourceEl=el.querySelector('.doc-preview');
-      if(!sourceEl){alert('印刷要素が見つかりません');return;}
-      // transformを一時解除してキャプチャ
-      const prevTransform=sourceEl.style.transform;
-      const prevOrigin=sourceEl.style.transformOrigin;
-      const prevW=sourceEl.style.width;
-      const prevMaxW=sourceEl.style.maxWidth;
-      sourceEl.style.transform='none';
-      sourceEl.style.transformOrigin='initial';
-      sourceEl.style.width=RECEIPT_W+'px';
-      sourceEl.style.maxWidth=RECEIPT_W+'px';
-      await new Promise(r=>setTimeout(r,120));
-      const canvas=await html2canvas(sourceEl,{
+      // オフスクリーンdivを作成（transform:none、画面外に配置）
+      const offDiv=document.createElement('div');
+      offDiv.style.cssText=`position:fixed;top:-99999px;left:0;width:${RECEIPT_W}px;background:white;z-index:-1;`;
+      offDiv.innerHTML=previewInner.innerHTML;
+      // オフスクリーンdivのtransformをリセット
+      offDiv.style.transform='none';
+      offDiv.style.transformOrigin='initial';
+      document.body.appendChild(offDiv);
+      await new Promise(r=>setTimeout(r,150));
+
+      const canvas=await html2canvas(offDiv,{
         scale:1,useCORS:true,allowTaint:true,
         backgroundColor:'#ffffff',logging:false,
         width:RECEIPT_W,windowWidth:RECEIPT_W+200,
         x:0,y:0,scrollX:0,scrollY:0,
       });
-      sourceEl.style.transform=prevTransform;
-      sourceEl.style.transformOrigin=prevOrigin;
-      sourceEl.style.width=prevW;
-      sourceEl.style.maxWidth=prevMaxW;
-      // -90度回転
+      document.body.removeChild(offDiv);
+
+      // -90度回転してPDF化
       const rot=document.createElement('canvas');
       rot.width=canvas.height; rot.height=canvas.width;
       const ctx=rot.getContext('2d');
@@ -3765,7 +3768,9 @@ async function printToSII(){
       const pageH=Math.max(54,imgH+mT+3);
       doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
       doc.addImage(rot.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
+
     }else{
+      // 納品書等: 220px縦型 scale:3
       const sourceEl=el.querySelector('.doc-preview')||el.querySelector('div')||el;
       const PRINT_W=220;
       const prevW=sourceEl.style.width;
@@ -3785,6 +3790,7 @@ async function printToSII(){
       doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
       doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
     }
+
     const pdfBase64=doc.output('datauristring').split(',')[1];
     const url='siiprintagent://1.0/print?Format=pdf'
       +'&Data='+encodeURIComponent(pdfBase64)
@@ -4052,51 +4058,57 @@ function genReceiptDoc(data,co){
     </div>`;
 
   if(currentPrintMode==='handy'){
-    // 横向き印刷用: 22600px幅, scale:1
-    // フォント全て前回の2倍・余白最小・下線は文字幅のみ
-    // 印刷長さ = (22600 / コンテンツ高さ) × 54mm ≈ 130mm(13cm)
-    // プレビュー: scale(0.015)でモーダル内に縦向き表示
-    const PREV_SCALE = 0.015;
-    const INNER_W = 22600;
-    const INNER_H_EST = 4200; // 推定コンテンツ高さ(px)
-    const PREV_W = Math.round(INNER_H_EST * PREV_SCALE);  // ≒63px 縦幅
-    const PREV_H = Math.round(INNER_W * PREV_SCALE);      // ≒339px 横幅→縦表示で高さ
-    return`<div style="overflow:hidden;width:${PREV_W+20}px;height:${PREV_H+20}px;margin:0 auto;background:#eee;padding:10px;box-sizing:border-box;border-radius:4px;">
-      <div class="doc-preview" style="
-        width:${INNER_W}px;
+    // 領収書ハンディ: プレビュー用（縦向きscale表示）
+    // 印刷はprintToSII内でオフスクリーンdivを生成してキャプチャ
+    const _receiptData = JSON.stringify({
+      custName: c.name,
+      amt: Math.round(amt),
+      note: note||'商品代として',
+      date: fmtDateJP(date),
+      coName: co.name||'',
+      coAddr: (co.addr||'').replace(/^〒?\d{3}-?\d{4}\s*/,''),
+      coTel: co.tel||'',
+      coInvoiceNo: co.invoiceNo||'',
+      slipNo: no,
+    });
+    return`<div
+      id="receiptPreviewOuter"
+      data-receipt='${_receiptData.replace(/'/g,"&#39;")}'
+      style="width:340px;height:490px;overflow:hidden;background:#eee;border-radius:4px;padding:6px;box-sizing:border-box;position:relative;">
+      <div style="font-size:10px;color:#888;text-align:center;margin-bottom:4px;">▼ 印刷プレビュー（縦向き）</div>
+      <div id="receiptPreviewInner" style="
+        position:absolute;
+        top:30px; left:6px;
+        width:22600px;
         font-family:'Noto Sans JP',sans-serif;
         background:white;
         padding:60px 100px;
         line-height:1.4;
         transform-origin:top left;
-        transform:rotate(-90deg) translateX(-100%) scale(${PREV_SCALE});
+        transform:rotate(-90deg) translateX(-100%) scale(0.0150);
+        white-space:nowrap;
       ">
-        <!-- タイトル + 日付 -->
-        <div style="display:flex;align-items:flex-end;border-bottom:28px solid #000;padding-bottom:30px;margin-bottom:30px;">
-          <div style="flex:1;text-align:center;font-size:702px;font-weight:900;letter-spacing:80px;white-space:nowrap;">領　収　書</div>
-          <div style="font-size:322px;color:#333;white-space:nowrap;padding-bottom:10px;">${fmtDateJP(date)}</div>
+        <div style="display:flex;align-items:flex-end;border-bottom:28px solid #000;padding-bottom:30px;margin-bottom:28px;">
+          <div style="flex:1;text-align:center;font-size:702px;font-weight:900;letter-spacing:80px;">領　収　書</div>
+          <div style="font-size:322px;color:#333;padding-bottom:10px;">${fmtDateJP(date)}</div>
         </div>
-        <!-- 顧客名（下線は文字幅のみ・inline-block）+ 収入印紙 -->
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:60px;margin-bottom:30px;">
-          <div style="font-size:552px;font-weight:700;white-space:nowrap;display:inline-block;border-bottom:16px solid #000;padding-bottom:20px;">${c.name}　様</div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:60px;margin-bottom:28px;">
+          <div style="font-size:552px;font-weight:700;display:inline-block;border-bottom:16px solid #000;padding-bottom:18px;">${c.name}　様</div>
           <div style="width:1100px;height:1100px;border:24px solid #333;display:flex;align-items:center;justify-content:center;font-size:308px;font-weight:700;color:#333;flex-shrink:0;text-align:center;line-height:1.8;">収入<br>印紙</div>
         </div>
-        <!-- 金額（中央・下線は文字幅のみ・inline-block） -->
-        <div style="text-align:center;margin-bottom:30px;">
-          <div style="font-size:802px;font-weight:900;white-space:nowrap;display:inline-block;border-bottom:16px solid #000;padding-bottom:20px;">¥${Math.round(amt).toLocaleString()}－</div>
+        <div style="text-align:center;margin-bottom:28px;">
+          <span style="font-size:802px;font-weight:900;display:inline-block;border-bottom:16px solid #000;padding-bottom:18px;">¥${Math.round(amt).toLocaleString()}－</span>
         </div>
-        <!-- 但し書き・上記正に -->
-        <div style="font-size:400px;white-space:nowrap;margin-bottom:10px;">但し、${note||'商品代として'}</div>
-        <div style="font-size:356px;color:#444;padding-bottom:30px;margin-bottom:30px;white-space:nowrap;border-bottom:8px solid #ccc;">上記正に領収致しました。</div>
-        <!-- 会社情報 + 伝票No -->
+        <div style="font-size:400px;margin-bottom:10px;">但し、${note||'商品代として'}</div>
+        <div style="font-size:356px;color:#444;border-bottom:8px solid #ccc;padding-bottom:28px;margin-bottom:28px;">上記正に領収致しました。</div>
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:60px;">
           <div style="line-height:1.6;">
-            <div style="font-size:400px;font-weight:700;white-space:nowrap;">${co.name||''}</div>
-            ${co.addr?`<div style="font-size:312px;white-space:nowrap;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
-            ${co.tel?`<div style="font-size:312px;white-space:nowrap;">TEL: ${co.tel}</div>`:''}
-            ${co.invoiceNo?`<div style="font-size:312px;white-space:nowrap;">登録番号: ${co.invoiceNo}</div>`:''}
+            <div style="font-size:400px;font-weight:700;">${co.name||''}</div>
+            ${co.addr?`<div style="font-size:312px;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
+            ${co.tel?`<div style="font-size:312px;">TEL: ${co.tel}</div>`:''}
+            ${co.invoiceNo?`<div style="font-size:312px;">登録番号: ${co.invoiceNo}</div>`:''}
           </div>
-          <div style="font-size:312px;color:#555;text-align:right;white-space:nowrap;flex-shrink:0;">伝票No:<br>${no}</div>
+          <div style="font-size:312px;color:#555;text-align:right;flex-shrink:0;">伝票No:<br>${no}</div>
         </div>
       </div>
     </div>`;
