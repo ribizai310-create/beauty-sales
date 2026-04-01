@@ -1248,6 +1248,7 @@ tr:hover td{background:var(--cream);}
     <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
       <button class="btn btn-outline" onclick="closeModal('docModal')">閉じる</button>
       <button class="btn btn-primary" onclick="printDoc()">🖨️ 通常印刷</button>
+      <button class="btn btn-success" onclick="testPrintSII()" id="siiTestBtn" style="background:#e67e22;display:none;">🔌 テスト印刷</button>
       <button class="btn btn-success" onclick="printToSII()" id="siiPrintBtn" style="background:#1a7abf;display:none;">📱 MP-B20印刷</button>
     </div>
   </div>
@@ -3689,234 +3690,130 @@ function showDocModal(){
 // =============================================
 function handlePrint(){
   const co=getCo();
-  const model=co.handyModel||'generic';
-  if(model==='sii_mpb20' && currentPrintMode==='handy'){
-    printToSII();
-  } else {
-    window.print();
-  }
+  if(co.handyModel==='sii_mpb20'&&currentPrintMode==='handy') printToSII();
+  else window.print();
 }
 
-// SII URL Print Agent経由でMP-B20に印刷（公式仕様準拠）
-async function printToSII(){
-  const el=document.getElementById('docContent');
-  if(!el){ alert('印刷内容がありません'); return; }
-  try{
-    // HTML→PDFをBlobで生成してBase64取得
-    const htmlContent = `<!DOCTYPE html><html><head>
-<meta charset="UTF-8">
-<style>
-body{font-family:'Courier New',monospace;font-size:7.5pt;width:52mm;margin:2mm;line-height:1.4;}
-table{width:100%;border-collapse:collapse;font-size:7pt;}
-th,td{padding:1px 2px;}
-strong{font-weight:bold;}
-hr{border-top:1px solid #000;}
-</style></head><body>${el.innerHTML}</body></html>`;
-
-    // iOSのprint APIでPDFを生成してBlob取得
-    const iframe = document.createElement('iframe');
-    iframe.style.cssText='position:fixed;width:58mm;height:auto;top:-9999px;left:-9999px;';
-    document.body.appendChild(iframe);
-
-    return new Promise((resolve)=>{
-      iframe.onload = async ()=>{
-        try{
-          iframe.contentDocument.open();
-          iframe.contentDocument.write(htmlContent);
-          iframe.contentDocument.close();
-
-          // printToPDFは利用不可のため、html2canvas + 手動PDF生成
-          // 代わりにシンプルな方法：HTMLをテキストに変換してPRN形式のPDFを生成
-          document.body.removeChild(iframe);
-
-          // シンプルPDF生成（テキストのみ）
-          const textLines = el.innerText.split('\n').filter(l=>l.trim());
-          const pdfBase64 = generateSimplePDF(textLines);
-
-          // 公式仕様通りのURLスキーム（&区切り、encodeURIComponent使用）
-          const thisPage = window.location.href;
-          const url = 'siiprintagent://1.0/print?'
-            + 'CallbackSuccess=' + encodeURIComponent(thisPage) + '&'
-            + 'CallbackFail=' + encodeURIComponent(thisPage) + '&'
-            + 'BtKeepConnect=always&'
-            + 'Format=pdf&'
-            + 'Data=' + encodeURIComponent(pdfBase64) + '&'
-            + 'ErrorDialog=yes&'
-            + 'PaperWidth=58&'
-            + 'FitToWidth=yes&'
-            + 'CutType=partial&'
-            + 'SelectOnError=no';
-
-          location.href = url;
-          resolve();
-        }catch(e2){
-          document.body.removeChild(iframe);
-          alert('印刷エラー: ' + e2.message);
-          resolve();
-        }
-      };
-      iframe.src = 'about:blank';
-    });
-  }catch(e){
-    alert('印刷エラー: ' + e.message);
-  }
-}
-
-function generateSimplePDF(textLines){
-  // 最小限のPDF生成（Type1フォントのみ使用）
-  const nl = '\n';
-  let stream = 'BT' + nl;
-  stream += '/F1 8 Tf' + nl;
-  stream += '0 0 0 rg' + nl;
-  stream += '2 810 Td' + nl;
-  stream += '9 TL' + nl;
-
-  textLines.forEach(line=>{
-    // PDFの文字列エスケープ
-    const safe = line.replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)').substring(0,60);
-    stream += '(' + safe + ') Tj T*' + nl;
+let _libsLoaded=false;
+function loadPrintLibs(){
+  return new Promise(async(resolve,reject)=>{
+    if(_libsLoaded){resolve();return;}
+    try{
+      if(typeof window.jspdf==='undefined') await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      if(typeof html2canvas==='undefined') await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      _libsLoaded=true; resolve();
+    }catch(e){reject(e);}
   });
-  stream += 'ET' + nl;
-
-  const streamBytes = stream.length;
-  const w = 165; // 58mm ≈ 165pt
-  const h = 841;
-
-  const o1 = '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj' + nl;
-  const o2 = '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj' + nl;
-  const o3 = `3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${w} ${h}]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj` + nl;
-  const o4 = `4 0 obj<</Length ${streamBytes}>>` + nl + 'stream' + nl + stream + 'endstream' + nl + 'endobj' + nl;
-  const o5 = '5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Courier>>endobj' + nl;
-
-  const header = '%PDF-1.4' + nl;
-  const body = header + o1 + o2 + o3 + o4 + o5;
-  const xrefPos = body.length;
-  const offsets = [
-    header.length,
-    header.length + o1.length,
-    header.length + o1.length + o2.length,
-    header.length + o1.length + o2.length + o3.length,
-    header.length + o1.length + o2.length + o3.length + o4.length,
-  ];
-  const xref = 'xref' + nl + '0 6' + nl
-    + '0000000000 65535 f ' + nl
-    + offsets.map(o=>String(o).padStart(10,'0')+' 00000 n ').join(nl) + nl;
-  const trailer = `trailer<</Size 6/Root 1 0 R>>` + nl + 'startxref' + nl + xrefPos + nl + '%%EOF';
-
-  const full = body + xref + trailer;
-  // btoa（ASCII範囲のみ）
-  return btoa(unescape(encodeURIComponent(full)));
 }
-
-
-function buildMinimalPDF(text){
-  // 最小限のPDFバイナリを生成（テキストのみ）
-  const escaped = text.replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
-  const stream =
-    'BT\n' +
-    '/F1 8 Tf\n' +
-    '10 780 Td\n' +
-    '12 TL\n' +
-    escaped.split('\n').map(l=>`(${l.replace(/[()\\]/g,c=>'\\'+c)}) Tj T*`).join('\n') +
-    '\nET\n';
-  const streamBytes = new TextEncoder().encode(stream);
-  const len = streamBytes.length;
-
-  const header = `%PDF-1.4\n`;
-  const obj1 = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`;
-  const obj2 = `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`;
-  const obj3 = `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 165 841] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n`;
-  const obj4 = `4 0 obj\n<< /Length ${len} >>\nstream\n${stream}\nendstream\nendobj\n`;
-  const obj5 = `5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>\nendobj\n`;
-
-  const body = header+obj1+obj2+obj3+obj4+obj5;
-  const xrefOffset = body.length;
-  const xref = `xref\n0 6\n0000000000 65535 f \n${String(header.length).padStart(10,'0')} 00000 n \n${String(header.length+obj1.length).padStart(10,'0')} 00000 n \n${String(header.length+obj1.length+obj2.length).padStart(10,'0')} 00000 n \n${String(header.length+obj1.length+obj2.length+obj3.length).padStart(10,'0')} 00000 n \n${String(header.length+obj1.length+obj2.length+obj3.length+obj4.length).padStart(10,'0')} 00000 n \n`;
-  const trailer = `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-
-  const full = body + xref + trailer;
-  return new TextEncoder().encode(full);
-}
-
-
-function loadScript(src){
+function loadScriptPromise(src){
   return new Promise((resolve,reject)=>{
-    const s=document.createElement('script');
-    s.src=src; s.onload=resolve; s.onerror=reject;
+    const ex=document.querySelector(`script[src="${src}"]`);
+    if(ex){const ok=src.includes('jspdf')?typeof window.jspdf!=='undefined':typeof html2canvas!=='undefined';if(ok){resolve();return;}}
+    const s=document.createElement('script');s.src=src;s.onload=resolve;
+    s.onerror=()=>reject(new Error('ライブラリ読み込み失敗'));
     document.head.appendChild(s);
   });
 }
 
-function printToMPB20(){
-  // docContentからテキストを抽出してESC/POSコマンド生成
+async function printToSII(){
   const el=document.getElementById('docContent');
-  if(!el){ alert('印刷内容がありません'); return; }
-
-  // テキスト抽出
-  const lines=extractPrintLines(el);
-
-  // Star WebPRNT ビルダーでコマンド生成
-  if(typeof StarWebPrintBuilder === 'undefined'){
-    // SDK未読込の場合はwindow.printにフォールバック
-    alert('Star WebPRNT SDKが読み込まれていません。通常の印刷を使用します。');
-    window.print();
-    return;
-  }
-
+  if(!el){alert('印刷内容がありません');return;}
+  const siiBtn=document.getElementById('siiPrintBtn');
+  const origHTML=siiBtn?siiBtn.innerHTML:'';
+  if(siiBtn){siiBtn.innerHTML='⏳ 準備中...';siiBtn.disabled=true;}
   try{
-    const builder = new StarWebPrintBuilder();
-    let request = '';
-    request += builder.createInitializationElement();
-    request += builder.createTextElement({
-      codePage: 'UTF-8',
-      characterSpace: 0,
-    });
-
-    lines.forEach(line=>{
-      if(line.type==='separator'){
-        request += builder.createTextElement({data: '--------------------------------' + String.fromCharCode(10)});
-      } else if(line.bold){
-        request += builder.createTextElement({emphasis: true, data: line.text + String.fromCharCode(10)});
-        request += builder.createTextElement({emphasis: false});
-      } else {
-        request += builder.createTextElement({data: line.text + String.fromCharCode(10)});
-      }
-    });
-
-    // 用紙カット
-    request += builder.createCutPaperElement({feed: true, type: 'Partial'});
-
-    // Star WebPRNT通信
-    const trader = new StarWebPrintTrader({url: 'BT:MP-B20'});
-    trader.onReceive = function(response){
-      if(!trader.isSucceededResponse(response)){
-        alert('印刷エラー: ' + response.responseText);
-      }
-    };
-    trader.onError = function(response){
-      alert('プリンター通信エラー。MP-B20がBluetoothで接続されているか確認してください。');
-    };
-    trader.sendMessage({request});
+    await loadPrintLibs();
+    const {jsPDF}=window.jspdf;
+    const isReceiptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
+    let doc;
+    if(isReceiptHandy){
+      // 領収書: 1520px横長をscale:1でキャプチャ→-90度回転→縦向き58mmPDF
+      // 印刷長さ=(1520/コンテンツ高さ456px)*54≈180mm(18cm)
+      const sourceEl=el.querySelector('.doc-preview');
+      if(!sourceEl){alert('doc-previewが見つかりません');return;}
+      const W=1520;
+      sourceEl.style.width=W+'px';
+      sourceEl.style.maxWidth=W+'px';
+      sourceEl.style.minWidth=W+'px';
+      await new Promise(r=>setTimeout(r,80));
+      const canvas=await html2canvas(sourceEl,{
+        scale:1,useCORS:true,allowTaint:true,
+        backgroundColor:'#ffffff',
+        width:W,windowWidth:1800,
+        x:0,y:0,scrollX:0,scrollY:0,logging:false,
+      });
+      sourceEl.style.width='';
+      sourceEl.style.maxWidth='';
+      sourceEl.style.minWidth='';
+      if(!canvas||canvas.width===0){alert('キャプチャ失敗');return;}
+      const rot=document.createElement('canvas');
+      rot.width=canvas.height; rot.height=canvas.width;
+      const ctx=rot.getContext('2d');
+      ctx.fillStyle='#ffffff';
+      ctx.fillRect(0,0,rot.width,rot.height);
+      ctx.translate(rot.width/2,rot.height/2);
+      ctx.rotate(-Math.PI/2);
+      ctx.drawImage(canvas,-canvas.width/2,-canvas.height/2);
+      const mL=2,mT=3,imgW=54;
+      const imgH=(rot.height/rot.width)*imgW;
+      const pageH=Math.max(54,imgH+mT+3);
+      doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
+      doc.addImage(rot.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
+    }else{
+      const sourceEl=el.querySelector('.doc-preview')||el.querySelector('div')||el;
+      const W=220;
+      sourceEl.style.width=W+'px';
+      sourceEl.style.maxWidth=W+'px';
+      const canvas=await html2canvas(sourceEl,{
+        scale:3,useCORS:true,allowTaint:true,
+        backgroundColor:'#ffffff',
+        width:W,windowWidth:W+30,scrollX:0,scrollY:0,logging:false,
+      });
+      sourceEl.style.width='';
+      sourceEl.style.maxWidth='';
+      const mL=2,mT=3,imgW=54;
+      const imgH=(canvas.height/canvas.width)*imgW;
+      const pageH=Math.max(60,imgH+mT+4);
+      doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
+      doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
+    }
+    const b64=doc.output('datauristring').split(',')[1];
+    const url='siiprintagent://1.0/print?Format=pdf&Data='+encodeURIComponent(b64)+'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
+    if(url.length>3500000){alert('データが大きすぎます');return;}
+    window.location.href=url;
   }catch(e){
-    alert('印刷エラー: ' + e.message + ' 通常印刷に切り替えます。');
-    window.print();
+    console.error('印刷エラー:',e);
+    alert('印刷エラー: '+e.message);
+  }finally{
+    if(siiBtn){siiBtn.innerHTML=origHTML;siiBtn.disabled=false;}
   }
 }
 
-function extractPrintLines(el){
-  const lines=[];
-  const text=el.innerText||el.textContent||'';
-  text.split('\n').forEach(t=>{
-    const trimmed=t.trim();
-    if(!trimmed) return;
-    if(trimmed.match(/^[-─＝]+$/)){
-      lines.push({type:'separator'});
-    } else {
-      lines.push({type:'text', text:trimmed, bold:false});
-    }
-  });
-  return lines;
+async function testPrintSII(){
+  const btn=document.getElementById('siiTestBtn');
+  if(btn){btn.innerHTML='⏳...';btn.disabled=true;}
+  try{
+    if(typeof window.jspdf==='undefined') await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,80]});
+    doc.setFontSize(14);doc.setFont('helvetica','bold');
+    doc.text('--- TEST PRINT ---',29,15,{align:'center'});
+    doc.setFontSize(10);doc.setFont('helvetica','normal');
+    doc.text('MP-B20 OK',29,26,{align:'center'});
+    doc.text(new Date().toISOString().slice(0,19),29,34,{align:'center'});
+    doc.setLineWidth(0.4);doc.line(3,39,55,39);
+    doc.setFontSize(16);doc.setFont('helvetica','bold');
+    doc.text('SUCCESS!',29,50,{align:'center'});
+    const b64=doc.output('datauristring').split(',')[1];
+    window.location.href='siiprintagent://1.0/print?Format=pdf&Data='+encodeURIComponent(b64)+'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
+  }catch(e){alert('テスト印刷エラー: '+e.message);}
+  finally{if(btn){btn.innerHTML='🔌 テスト印刷';btn.disabled=false;}}
 }
+
+function buildMinimalPDF(t){return null;}
+function loadScript(s){return loadScriptPromise(s);}
+function printToMPB20(){printToSII();}
+function extractPrintLines(el){return[];}
 
 function setPrintMode(mode){
   currentPrintMode=mode;
@@ -3939,11 +3836,13 @@ function renderDocContent(){
   else if(currentDocType==='salesReport') html=genSalesReportDoc(co);
   else if(currentDocType==='payReport') html=genPayReportDoc(co);
   document.getElementById('docContent').innerHTML=`<div class="${currentPrintMode==='handy'?'print-handy':'print-full'}">${html}</div>`;
-  // SII MP-B20印刷ボタンの表示制御
   const siiBtn=document.getElementById('siiPrintBtn');
+  const siiTestBtn=document.getElementById('siiTestBtn');
   if(siiBtn){
-    const co=getCo();
-    siiBtn.style.display=(co.handyModel==='sii_mpb20'&&currentPrintMode==='handy')?'inline-flex':'none';
+    const co2=getCo();
+    const showSii=(co2.handyModel==='sii_mpb20'&&currentPrintMode==='handy');
+    siiBtn.style.display=showSii?'inline-flex':'none';
+    if(siiTestBtn)siiTestBtn.style.display=showSii?'inline-flex':'none';
   }
   const titles={delivery:'納品書',receipt:'領収書',invoice:'請求書',estimate:'見積書',daily:'日報',salesReport:'売上日報',payReport:'入金日報'};
   document.getElementById('docModalTitle').textContent=(titles[currentDocType]||'書類')+' プレビュー ('+(currentPrintMode==='handy'?'ハンディ版':'PC正式版')+')';
@@ -3974,48 +3873,49 @@ function genDeliveryDoc(d,c,dateStr,co){
   const saleTypeLabel={credit:'掛売',cash:'現金売',return:'返　品'};
   const isReturn = d.saleType==='return';
 
-  // ===== HANDY VERSION (58mm レシートプリンター・正式伝票) =====
+  // ===== HANDY VERSION (58mm レシートプリンター) =====
   if(currentPrintMode==='handy'){
-    const divider = '─'.repeat(24);
     const taxLabel = i => i.taxRate===8?' ☆':i.taxRate===0?' ★':'';
-    return`<div class="doc-preview" style="max-width:58mm;font-size:11px;padding:8px;font-family:'Noto Sans JP',monospace;line-height:1.7;">
-      <div style="text-align:center;font-size:14px;font-weight:700;letter-spacing:3px;margin-bottom:4px;">${isReturn?'返　品　書':'納　品　書'}</div>
-      <div style="text-align:center;font-size:10px;margin-bottom:2px;">${co.name||''}</div>
-      ${co.tel?`<div style="text-align:center;font-size:10px;">TEL: ${co.tel}</div>`:''}
-      ${co.invoiceNo?`<div style="text-align:center;font-size:9px;">登録番号: ${co.invoiceNo}</div>`:''}
-      <div style="border-top:1px solid #000;margin:5px 0;"></div>
-      <div style="font-size:10px;">${dateStr}</div>
-      <div style="font-weight:700;font-size:12px;">${c.name} 御中</div>
-      <div style="font-size:10px;">担当: ${c.contact||''} &nbsp; ${saleTypeLabel[d.saleType]||''}</div>
-      <div style="border-top:1px dashed #000;margin:4px 0;"></div>
-      <div style="display:flex;justify-content:space-between;font-size:9px;font-weight:600;margin-bottom:2px;">
-        <span style="flex:1;">商品名</span><span style="width:28px;text-align:right;">数量</span><span style="width:44px;text-align:right;">単価</span><span style="width:44px;text-align:right;">税抜</span><span style="width:36px;text-align:right;">消費税</span><span style="width:46px;text-align:right;">税込</span>
+    let itemNo = 0;
+    return`<div class="doc-preview" style="width:220px;font-family:'Noto Sans JP',sans-serif;background:white;padding:0 0 6px 0;line-height:1.5;">
+      <div style="text-align:center;font-size:22px;font-weight:900;padding:7px 4px 5px;letter-spacing:2px;">${isReturn?'【返 品 書】':'【納 品 書】'}</div>
+      <div style="text-align:right;font-size:16px;padding:2px 6px;">${dateStr}</div>
+      <div style="font-size:19px;font-weight:700;border-bottom:2px solid #000;padding:0 6px 4px;margin-bottom:3px;">${c.name}　御中</div>
+      <div style="padding:0 6px;line-height:1.55;">
+        <div style="font-size:17px;font-weight:700;">${co.name||''}</div>
+        ${co.addr?`<div style="font-size:15px;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
+        ${co.tel?`<div style="font-size:15px;">TEL: ${co.tel}</div>`:''}
+        ${co.fax?`<div style="font-size:15px;">FAX: ${co.fax}</div>`:''}
+        ${co.invoiceNo?`<div style="font-size:15px;">登録番号: ${co.invoiceNo}</div>`:''}
+        <div style="font-size:15px;">下記の通り納品いたしました</div>
       </div>
-      <div style="border-top:1px solid #000;margin-bottom:3px;"></div>
-      ${items.map(i=>`
-        <div style="font-size:10px;font-weight:600;margin-top:2px;">${i.name}${taxLabel(i)}</div>
-        <div style="display:flex;justify-content:space-between;font-size:10px;">
-          <span style="width:28px;text-align:right;">${i.qty}</span>
-          <span style="width:44px;text-align:right;">${Math.round(i.price).toLocaleString()}</span>
-          <span style="width:44px;text-align:right;">${Math.round(i.base||i.price*i.qty).toLocaleString()}</span>
-          <span style="width:36px;text-align:right;">${Math.round(i.taxAmt||0).toLocaleString()}</span>
-          <span style="width:46px;text-align:right;font-weight:600;">${Math.round(i.total).toLocaleString()}</span>
-        </div>`).join('')}
-      <div style="border-top:1px solid #000;margin:4px 0;"></div>
-      ${tb.b10?`<div style="display:flex;justify-content:space-between;font-size:10px;"><span>10%対象 税抜:</span><span>${Math.round(tb.b10).toLocaleString()}</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;"><span>　消費税(10%):</span><span>${Math.round(tb.t10).toLocaleString()}</span></div>`:''}
-      ${tb.b8?`<div style="display:flex;justify-content:space-between;font-size:10px;"><span>8%対象☆ 税抜:</span><span>${Math.round(tb.b8).toLocaleString()}</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;"><span>　消費税(8%):</span><span>${Math.round(tb.t8).toLocaleString()}</span></div>`:''}
-      ${tb.b0?`<div style="display:flex;justify-content:space-between;font-size:10px;"><span>非課税★:</span><span>${Math.round(tb.b0).toLocaleString()}</span></div>`:''}
-      <div style="border-top:2px solid #000;margin:3px 0;"></div>
-      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;">
-        <span>${isReturn?'返品合計':'税込合計'}:</span><span>¥${Math.round(tb.total).toLocaleString()}</span>
+      <div style="font-size:15px;padding:3px 6px 0;">${saleTypeLabel[d.saleType]||''}</div>
+      <div style="border-top:1px dashed #000;margin:5px 4px 4px;"></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#333;padding:0 4px;margin-bottom:1px;">
+        <span style="flex:1;">品名</span><span style="width:20px;text-align:right;">数</span>
+        <span style="width:48px;text-align:right;">単価</span><span style="width:54px;text-align:right;">税込</span>
       </div>
-      ${d.note?`<div style="border-top:1px dashed #000;margin:4px 0;font-size:10px;">備考: ${d.note}</div>`:''}
-      <div style="border-top:1px dashed #000;margin:5px 0;font-size:9px;text-align:center;">
-        ☆軽減税率(8%) ★非課税<br>
-        伝票No: ${genNo('D')}
+      <div style="border-top:1.5px solid #000;margin:0 4px;"></div>
+      <div style="padding:0 4px;">
+      ${items.map((i,idx)=>{
+        if(i.isDiscount){
+          return`<div style="border-top:1px dashed #000;padding:3px 0;"><div style="font-size:15px;color:#856404;display:flex;justify-content:space-between;"><span style="flex:1;">▲${i.name||'値引き'}</span><span style="width:54px;text-align:right;font-weight:700;">▲${Math.round(Math.abs(i.price||0)).toLocaleString()}</span></div></div>`;
+        } else {
+          itemNo++;
+          const sep=idx>0?'border-top:1px dashed #000;':'';
+          return`<div style="${sep}padding:3px 0;"><div style="font-size:15px;font-weight:700;line-height:1.4;">${itemNo}. ${i.name}${taxLabel(i)}</div><div style="display:flex;justify-content:space-between;font-size:15px;line-height:1.4;"><span style="flex:1;"></span><span style="width:20px;text-align:right;">${i.qty}</span><span style="width:48px;text-align:right;">${Math.round(i.price).toLocaleString()}</span><span style="width:54px;text-align:right;font-weight:700;">${Math.round(i.total).toLocaleString()}</span></div></div>`;
+        }
+      }).join('')}
       </div>
+      <div style="border-top:2px solid #000;margin:4px 4px 2px;"></div>
+      <div style="padding:0 4px;">
+      ${tb.b10?`<div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>10%対象 税抜:</span><span>${Math.round(tb.b10).toLocaleString()}</span></div><div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>　消費税(10%):</span><span>${Math.round(tb.t10).toLocaleString()}</span></div>`:''}
+      ${tb.b8?`<div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>8%対象☆ 税抜:</span><span>${Math.round(tb.b8).toLocaleString()}</span></div><div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>　消費税(8%):</span><span>${Math.round(tb.t8).toLocaleString()}</span></div>`:''}
+      ${tb.b0?`<div style="display:flex;justify-content:space-between;font-size:15px;color:#444;line-height:1.6;"><span>非課税★:</span><span>${Math.round(tb.b0).toLocaleString()}</span></div>`:''}
+      </div>
+      <div style="border-top:2.5px solid #000;margin:3px 4px;"></div>
+      <div style="display:flex;justify-content:space-between;font-size:21px;font-weight:900;padding:0 4px;"><span>${isReturn?'返品合計':'税込合計'}</span><span>¥${Math.round(tb.total).toLocaleString()}</span></div>
+      <div style="border-top:1px dashed #000;margin:5px 4px 2px;font-size:14px;text-align:center;color:#444;">☆軽減税率(8%) ★非課税　伝票No: ${genNo('D')}</div>
     </div>`;
   }
 
@@ -4140,98 +4040,41 @@ function genReceiptDoc(data,co){
     </div>`;
 
   if(currentPrintMode==='handy'){
-    // ハンディ版: 横向き 130mm×58mm（ロール紙58mm幅・landscape想定）
-    // レイアウト順（上から）:
-    //   ① タイトル「領収書」中央上部 ＋ 右に日付
-    //   ② 顧客名（大きめ）
-    //   ③ 領収金額（最大サイズ）
-    //   ④ 但し書き
-    //   ⑤ 上記正に領収致しました
-    //   ⑥ 下段左: 会社情報 ／ 右: 収入印紙欄
-    return`<div style="
-        width:130mm;
-        font-family:'Noto Sans JP','MS Gothic',sans-serif;
-        background:white;
-        border:1px solid #bbb;
-        box-sizing:border-box;
-        padding:0;
-      ">
+    // 領収書ハンディ版: 幅1520px・フォント1.333倍・transformなし
+    // 印刷長さ=(1520/コンテンツ高さ456px)*54mm ≈ 180mm(18cm)
+    // 日付24px=会社名32pxのスケール感に統一
+    return`<div class="doc-preview" style="width:1520px;font-family:'Noto Sans JP',sans-serif;background:white;padding:5px 16px;line-height:1.3;">
 
-      <!-- ① タイトル行 -->
-      <div style="
-        display:flex;
-        justify-content:center;
-        align-items:baseline;
-        gap:16px;
-        padding:8px 14px 6px 14px;
-        border-bottom:2px solid #222;
-        position:relative;
-      ">
-        <div style="font-size:28px;font-weight:900;letter-spacing:8px;">領　収　書</div>
-        <div style="font-size:13px;color:#444;position:absolute;right:14px;bottom:8px;">${fmtDateJP(date)}</div>
+      <!-- タイトル + 日付 -->
+      <div style="display:flex;align-items:flex-end;border-bottom:3px solid #000;padding-bottom:4px;margin-bottom:5px;">
+        <div style="flex:1;text-align:center;font-size:56px;font-weight:900;letter-spacing:10px;white-space:nowrap;">領　収　書</div>
+        <div style="font-size:24px;color:#333;white-space:nowrap;">${fmtDateJP(date)}</div>
       </div>
 
-      <!-- ② 顧客名 -->
-      <div style="padding:8px 14px 4px 14px;">
-        <div style="font-size:22px;font-weight:700;border-bottom:1.5px solid #444;padding-bottom:4px;display:inline-block;min-width:60mm;">
-          ${c.name}　様
+      <!-- 顧客名（文字幅のみ下線）+ 収入印紙 -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:5px;">
+        <div style="font-size:45px;font-weight:700;display:inline-block;border-bottom:3px solid #000;padding-bottom:2px;white-space:nowrap;">${c.name}　様</div>
+        <div style="width:88px;height:88px;border:3px solid #333;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:#333;flex-shrink:0;text-align:center;line-height:1.6;">収入<br>印紙</div>
+      </div>
+
+      <!-- 金額（中央・文字幅のみ下線） -->
+      <div style="text-align:center;margin-bottom:5px;">
+        <span style="font-size:67px;font-weight:900;display:inline-block;border-bottom:3px solid #000;padding-bottom:2px;white-space:nowrap;">¥${Math.round(amt).toLocaleString()}－</span>
+      </div>
+
+      <!-- 但し書き・上記正に -->
+      <div style="font-size:24px;white-space:nowrap;margin-bottom:2px;">但し、${note||'商品代として'}</div>
+      <div style="font-size:21px;color:#444;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:4px;white-space:nowrap;">上記正に領収致しました。</div>
+
+      <!-- 会社情報 + 伝票No -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div style="line-height:1.4;">
+          <div style="font-size:32px;font-weight:700;white-space:nowrap;">${co.name||''}</div>
+          ${co.addr?`<div style="font-size:21px;white-space:nowrap;">${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
+          ${co.tel?`<div style="font-size:21px;white-space:nowrap;">TEL: ${co.tel}</div>`:''}
+          ${co.invoiceNo?`<div style="font-size:21px;white-space:nowrap;">登録番号: ${co.invoiceNo}</div>`:''}
         </div>
-      </div>
-
-      <!-- ③ 領収金額 -->
-      <div style="padding:6px 14px 4px 14px;">
-        <div style="font-size:13px;color:#888;margin-bottom:2px;">ご領収金額</div>
-        <div style="font-size:40px;font-weight:900;letter-spacing:2px;line-height:1.1;">
-          ¥${Math.round(amt).toLocaleString()}－
-        </div>
-      </div>
-
-      <!-- ④ 但し書き -->
-      <div style="padding:4px 14px 2px 14px;font-size:15px;">
-        但し、${note||'商品代として'}
-      </div>
-
-      <!-- ⑤ 上記正に領収 -->
-      <div style="padding:3px 14px 8px 14px;font-size:14px;color:#555;">
-        上記正に領収致しました
-      </div>
-
-      <!-- ⑥ 下段: 会社情報 ＋ 収入印紙欄 -->
-      <div style="
-        border-top:1px solid #bbb;
-        display:flex;
-        justify-content:space-between;
-        align-items:flex-end;
-        padding:7px 14px;
-        background:#fafafa;
-      ">
-        <!-- 左: 会社情報 -->
-        <div style="font-size:12px;color:#333;line-height:1.8;flex:1;">
-          ${co.addr?`<div>${co.addr}</div>`:''}
-          <div style="font-weight:700;font-size:14px;">${co.name||''}</div>
-          ${co.tel?`<div>TEL: ${co.tel}</div>`:''}
-          ${co.invoiceNo?`<div>登録番号: ${co.invoiceNo}</div>`:''}
-          <div style="color:#888;">伝票No: ${no}</div>
-        </div>
-        <!-- 右: 収入印紙欄 -->
-        <div style="
-          width:44mm;
-          height:44mm;
-          border:2px solid #888;
-          display:flex;
-          flex-direction:column;
-          align-items:center;
-          justify-content:center;
-          font-size:14px;
-          color:#888;
-          margin-left:10px;
-          flex-shrink:0;
-          text-align:center;
-          line-height:1.6;
-          border-radius:2px;
-        ">
-          収　入<br>印　紙
-        </div>
+        <div style="font-size:21px;color:#555;text-align:right;white-space:nowrap;flex-shrink:0;">伝票No:<br>${no}</div>
       </div>
 
     </div>`;
@@ -4262,7 +4105,7 @@ function genReceiptDoc(data,co){
             <div style="background:${bgHdr};color:white;padding:5px 20px;font-size:18px;font-weight:700;letter-spacing:8px;">領　収　書</div>
             ${ctrlBadge}
           </div>
-          <div style="text-align:right;font-size:12px;color:#555;line-height:1.9;">
+          <div style="text-align:right;font-size:9.5px;color:#555;line-height:1.9;">
             <div>No.&nbsp;${no}</div>
             <div>発行日&nbsp;${fmtDateJP(date)}</div>
           </div>
@@ -4271,11 +4114,11 @@ function genReceiptDoc(data,co){
         <!-- ② 宛先（左）＋ 発行者（右） -->
         <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:3mm;gap:6mm;">
           <div style="flex:1;">
-            ${c.addr?`<div style="font-size:11px;color:#666;margin-bottom:1mm;">${c.addr}</div>`:''}
-            <div style="font-size:26px;font-weight:700;border-bottom:2px solid #1a1a2e;padding-bottom:1.5mm;display:inline-block;min-width:60mm;letter-spacing:1px;">${c.name}&nbsp;御中</div>
+            ${c.addr?`<div style="font-size:9px;color:#666;margin-bottom:1mm;">${c.addr}</div>`:''}
+            <div style="font-size:22px;font-weight:700;border-bottom:2px solid #1a1a2e;padding-bottom:1.5mm;display:inline-block;min-width:60mm;letter-spacing:1px;">${c.name}&nbsp;御中</div>
           </div>
-          <div style="font-size:11px;color:#444;line-height:1.8;text-align:left;min-width:52mm;border-left:2px solid #e0e0e0;padding-left:4mm;">
-            <div style="font-size:14px;font-weight:700;color:#222;">${co.name||''}</div>
+          <div style="font-size:9px;color:#444;line-height:1.8;text-align:left;min-width:52mm;border-left:2px solid #e0e0e0;padding-left:4mm;">
+            <div style="font-size:12px;font-weight:700;color:#222;">${co.name||''}</div>
             ${co.addr?`<div>${co.addr}</div>`:''}
             ${co.tel?`<div>TEL：${co.tel}</div>`:''}
             ${co.invoiceNo?`<div>登録番号：${co.invoiceNo}</div>`:''}
@@ -4291,8 +4134,8 @@ function genReceiptDoc(data,co){
         </div>
 
         <!-- ④ 但し書き・上記領収 -->
-        <div style="font-size:14px;margin-bottom:1mm;">但し、<strong>${note||'商品代として'}</strong></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#555;border-bottom:1px solid #ddd;padding-bottom:2mm;margin-bottom:2.5mm;">
+        <div style="font-size:11px;margin-bottom:1mm;">但し、<strong>${note||'商品代として'}</strong></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#555;border-bottom:1px solid #ddd;padding-bottom:2mm;margin-bottom:2.5mm;">
           <span>上記正に領収致しました。</span>
           <span>お支払方法：<strong style="color:#333;">${method}</strong></span>
         </div>
@@ -4300,8 +4143,8 @@ function genReceiptDoc(data,co){
         <!-- ⑤ 内訳（左）＋ 収入印紙（右） -->
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex:1;">
           <div style="font-size:9px;">
-            <div style="font-size:13px;font-weight:700;border-bottom:1px solid #999;padding-bottom:1mm;margin-bottom:1.5mm;letter-spacing:2px;">内　訳</div>
-            <table style="border-collapse:collapse;font-size:12px;">
+            <div style="font-size:10px;font-weight:700;border-bottom:1px solid #999;padding-bottom:1mm;margin-bottom:1.5mm;letter-spacing:2px;">内　訳</div>
+            <table style="border-collapse:collapse;font-size:9.5px;">
               <thead>
                 <tr style="color:#888;border-bottom:1px solid #ddd;">
                   <td style="padding:1px 10px 2px 0;">税率</td>
@@ -4320,7 +4163,7 @@ function genReceiptDoc(data,co){
               </tbody>
             </table>
           </div>
-          <div style="width:56mm;height:56mm;border:2px solid #aaa;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aaa;font-size:16px;text-align:center;line-height:2.2;flex-shrink:0;">
+          <div style="width:28mm;height:28mm;border:1.5px solid #aaa;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aaa;font-size:11px;text-align:center;line-height:2.2;flex-shrink:0;">
             収&nbsp;入<br>印&nbsp;紙
           </div>
         </div>
