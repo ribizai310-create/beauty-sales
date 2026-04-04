@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>売上管理システム クラウド版</title>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// ★ここを書き換え（Firebaseで取得した値）
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// 保存
+window.saveSale = async function(){
+ const data = {
+  date: new Date().toISOString().slice(0,10),
+  customer: document.getElementById("customer").value,
+  amount: Number(document.getElementById("amount").value),
+  staff: document.getElementById("staff").value,
+ };
+
+ await addDoc(collection(db, "sales"), data);
+ alert("クラウド保存しました");
+ renderSales();
+};
+
+// 読み込み
+async function renderSales(){
+ const querySnapshot = await getDocs(collection(db, "sales"));
+ const tbody = document.querySelector("#sales-table tbody");
+ tbody.innerHTML = "";
+
+ querySnapshot.forEach(doc => {
+  const s = doc.data();
+  tbody.innerHTML += `
+  <tr>
+   <td>${s.date}</td>
+   <td>${s.customer}</td>
+   <td>¥${Number(s.amount).toLocaleString()}</td>
+   <td>${s.staff}</td>
+  </tr>`;
+ });
+}
+
+// 初期化
+window.onload = renderSales;
+</script>
+
+</head>
+
+<body>
+
+<h2>売上管理（クラウド版）</h2>
+
+顧客名：<input id="customer"><br><br>
+金額：<input id="amount"><br><br>
+担当：<input id="staff"><br><br>
+
+<button onclick="saveSale()">保存</button>
+
+<h3>売上一覧</h3>
+<table border="1" id="sales-table">
+<thead>
+<tr><th>日付</th><th>顧客</th><th>金額</th><th>担当</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+
+</body>
+</html>
