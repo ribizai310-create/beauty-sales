@@ -226,142 +226,125 @@ tr:hover td{background:var(--cream);}
 #collectPrintContent .collect-stat-val{font-size:14px;font-weight:700;color:#1a1a2e;}
 #collectPrintContent .collect-stat-lbl{font-size:10px;color:#888;}
 
-/* ===== 領収書ハンディ版 独立スタイル ===== */
-.receipt {
-  width: 140mm;
-  height: 80mm;
-  font-family: 'Noto Sans JP','MS Gothic',sans-serif;
+/* ===== 58mm レシートプリンター用 領収書 ===== */
+.receipt58 {
+  width: 58mm;
+  font-family: 'Noto Sans JP','MS Gothic','Hiragino Sans',sans-serif;
   background: white;
   box-sizing: border-box;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #bbb;
+  padding: 2mm 1mm;
+  line-height: 1.2;
+  page-break-inside: avoid;
 }
-.receipt * { box-sizing: border-box; margin: 0; padding: 0; }
-
-/* タイトル行 */
-.receipt__header {
-  display: flex;
-  justify-content: center;
-  align-items: baseline;
-  padding: 5px 12px 4px;
-  border-bottom: 2px solid #222;
-  position: relative;
-  flex-shrink: 0;
-}
-.receipt__title {
-  font-size: 29px;
-  font-weight: 900;
-  letter-spacing: 8px;
-}
-.receipt__date {
-  font-size: 14px;
-  color: #444;
-  position: absolute;
-  right: 12px;
-  bottom: 5px;
-}
-
-/* メイン: 顧客名+金額(左) / 印紙(右) */
-.receipt__main {
-  display: flex;
-  flex: 1;
-  border-bottom: 1px solid #bbb;
-  min-height: 0;
-}
-.receipt__left {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 6px 12px;
-  min-width: 0;
-}
-.receipt__name {
-  font-size: 23px;
-  font-weight: 700;
-  border-bottom: 1.5px solid #444;
-  padding-bottom: 3px;
-  margin-bottom: 4px;
-  display: inline-block;
+.receipt58 * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
   white-space: nowrap;
 }
-.receipt__amt-label {
-  font-size: 14px;
+/* タイトル */
+.r58-title {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  padding-bottom: 3px;
+  border-bottom: 2px solid #000;
+  margin-bottom: 4px;
+}
+/* 日付 */
+.r58-date {
+  text-align: right;
+  font-size: 11px;
+  color: #444;
+  margin-bottom: 3px;
+}
+/* 顧客名 */
+.r58-name {
+  font-size: 18px;
+  font-weight: 700;
+  border-bottom: 1.5px solid #333;
+  padding-bottom: 2px;
+  margin-bottom: 5px;
+  display: inline-block;
+}
+/* 金額ラベル */
+.r58-amt-label {
+  font-size: 11px;
   color: #888;
   margin-bottom: 1px;
 }
-.receipt__amount {
-  font-size: 42px;
+/* 金額 */
+.r58-amount {
+  font-size: 28px;
   font-weight: 900;
-  letter-spacing: 2px;
-  line-height: 1.0;
-}
-.receipt__inshi {
-  width: 44mm;
-  flex-shrink: 0;
-  border-left: 1px solid #bbb;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  color: #888;
   text-align: center;
-  line-height: 1.6;
+  letter-spacing: 1px;
+  margin-bottom: 5px;
+  border-bottom: 1.5px solid #333;
+  padding-bottom: 3px;
 }
-.receipt__inshi-box {
-  width: 83%;
-  aspect-ratio: 1;
+/* 但し書き・上記正に */
+.r58-memo {
+  font-size: 13px;
+  margin-bottom: 1px;
+}
+.r58-confirm {
+  font-size: 12px;
+  color: #222;
+  margin-bottom: 5px;
+}
+/* 区切り線 */
+.r58-sep {
+  border-top: 1px solid #bbb;
+  margin: 4px 0;
+}
+/* 会社情報行 */
+.r58-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.r58-company {
+  font-size: 11px;
+  color: #333;
+  line-height: 1.5;
+  flex: 1;
+}
+.r58-company-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+/* 収入印紙 */
+.r58-inshi {
+  width: 15mm;
+  height: 15mm;
   border: 1.5px solid #888;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 2px;
-}
-
-/* 但し書き・上記正に */
-.receipt__memo {
-  padding: 3px 12px 2px;
-  font-size: 17px;
-  border-bottom: 1px solid #eee;
-  flex-shrink: 0;
-}
-.receipt__confirm {
-  padding: 2px 12px 4px;
-  font-size: 15px;
-  color: #222;
-  flex-shrink: 0;
-}
-
-/* フッター: 会社情報 + 伝票No */
-.receipt__footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding: 5px 12px;
-  background: #fafafa;
-  border-top: 1px solid #bbb;
-  flex-shrink: 0;
-}
-.receipt__company {
-  font-size: 13px;
-  color: #333;
-  line-height: 1.7;
-  flex: 1;
-}
-.receipt__company-name {
-  font-size: 14px;
-  font-weight: 700;
-}
-.receipt__slipno {
-  font-size: 13px;
+  font-size: 10px;
   color: #888;
-  text-align: right;
-  white-space: nowrap;
+  text-align: center;
+  line-height: 1.6;
   flex-shrink: 0;
-  margin-left: 8px;
+  margin-left: 4px;
+  border-radius: 1px;
+}
+/* 伝票No */
+.r58-slipno {
+  font-size: 10px;
+  color: #aaa;
+  text-align: right;
+  margin-top: 2px;
+}
+@media print {
+  @page { size: 58mm auto; margin: 0; }
+  .receipt58 {
+    width: 58mm;
+    padding: 1mm;
+  }
 }
 
 </style>
@@ -3864,47 +3847,39 @@ async function printToSII(){
     const isReceiptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
     let doc;
     if(isReceiptHandy){
-      // 領収書: .receiptクラス(140x80mm=529x302px)をscale:1でキャプチャ
-      // → -90度回転 → 縦向き58mmPDF (印刷長さ94mm=9.4cm)
-      const sourceEl=el.querySelector('.receipt');
-      if(!sourceEl){alert('領収書要素(.receipt)が見つかりません');return;}
-      // サイズを固定
-      const W=529; const H=302; // 140mm×80mm @ 3.78px/mm
+      // 領収書: .receipt58(width:58mm=219px)をscale:3でキャプチャ
+      // 縦向きそのままPDF（回転不要）
+      const sourceEl=el.querySelector('.receipt58');
+      if(!sourceEl){alert('.receipt58が見つかりません');return;}
+      const W=219; // 58mm * 3.78px/mm
+      // 幅を固定してキャプチャ
       sourceEl.style.width=W+'px';
-      sourceEl.style.height=H+'px';
-      sourceEl.style.minHeight=H+'px';
-      sourceEl.style.maxHeight=H+'px';
-      await new Promise(r=>setTimeout(r,120));
+      sourceEl.style.maxWidth=W+'px';
+      await new Promise(r=>setTimeout(r,100));
       const canvas=await html2canvas(sourceEl,{
-        scale:1,useCORS:true,allowTaint:true,
+        scale:3,useCORS:true,allowTaint:true,
         backgroundColor:'#ffffff',
-        width:W,height:H,windowWidth:600,
+        width:W,windowWidth:300,
         x:0,y:0,scrollX:0,scrollY:0,logging:false,
       });
-      sourceEl.style.width='';sourceEl.style.height='';
-      sourceEl.style.minHeight='';sourceEl.style.maxHeight='';
+      sourceEl.style.width='';sourceEl.style.maxWidth='';
       if(!canvas||canvas.width===0){alert('キャプチャ失敗');return;}
-      // -90度回転
-      const rot=document.createElement('canvas');
-      rot.width=canvas.height; rot.height=canvas.width;
-      const ctx=rot.getContext('2d');
-      ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,rot.width,rot.height);
-      ctx.translate(rot.width/2,rot.height/2);
-      ctx.rotate(-Math.PI/2);
-      ctx.drawImage(canvas,-canvas.width/2,-canvas.height/2);
+      // 縦向きそのまま（回転不要）
+      // canvas幅=219*3=657px→54mm, 高さ=H*3px→(H/219)*54mm
       const mL=2,mT=3,imgW=54;
-      const imgH=(rot.height/rot.width)*imgW;
-      doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,Math.max(54,imgH+mT+3)]});
-      doc.addImage(rot.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
+      const imgH=(canvas.height/canvas.width)*imgW;
+      const pageH=Math.max(30,imgH+mT+3);
+      doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,pageH]});
+      doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
     }else{
       const sourceEl=el.querySelector('.doc-preview')||el.querySelector('div')||el;
       const W=220;
-      sourceEl.style.width=W+'px'; sourceEl.style.maxWidth=W+'px';
+      sourceEl.style.width=W+'px';sourceEl.style.maxWidth=W+'px';
       const canvas=await html2canvas(sourceEl,{
         scale:3,useCORS:true,allowTaint:true,backgroundColor:'#ffffff',
         width:W,windowWidth:W+30,x:0,y:0,scrollX:0,scrollY:0,logging:false,
       });
-      sourceEl.style.width=''; sourceEl.style.maxWidth='';
+      sourceEl.style.width='';sourceEl.style.maxWidth='';
       const mL=2,mT=3,imgW=54;
       const imgH=(canvas.height/canvas.width)*imgW;
       doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,Math.max(60,imgH+mT+4)]});
@@ -4166,45 +4141,48 @@ function genReceiptDoc(data,co){
     </div>`;
 
   if(currentPrintMode==='handy'){
-    // 領収書ハンディ版 - .receiptクラスで完全独立
-    // 140mm×80mm横向き / Flexbox / 既存スタイル影響なし
-    // html2canvas: 529x302px scale:1 → -90度回転 → 58mmPDF
-    return`<div class="receipt">
+    // 領収書ハンディ版 - .receipt58クラス（既存スタイル完全独立）
+    // width:58mm固定 / ゴシック系 / 左寄せ / line-height:1.2
+    // 印刷: scale:3でキャプチャ → 縦向きそのままPDF（回転不要）
+    return`<div class="receipt58">
 
-      <!-- タイトル行 -->
-      <div class="receipt__header">
-        <div class="receipt__title">領　収　書</div>
-        <div class="receipt__date">${fmtDateJP(date)}</div>
-      </div>
+      <!-- タイトル：中央・太字・大きく -->
+      <div class="r58-title">領　収　書</div>
 
-      <!-- メイン: 顧客名+金額(左) / 収入印紙(右) -->
-      <div class="receipt__main">
-        <div class="receipt__left">
-          <div class="receipt__name">${c.name}　様</div>
-          <div class="receipt__amt-label">ご領収金額</div>
-          <div class="receipt__amount">¥${Math.round(amt).toLocaleString()}－</div>
-        </div>
-        <div class="receipt__inshi">
-          <div class="receipt__inshi-box">収　入<br>印　紙</div>
-        </div>
-      </div>
+      <!-- 日付：右寄せ小さめ -->
+      <div class="r58-date">${fmtDateJP(date)}</div>
+
+      <!-- 顧客名：左寄せ・しっかりしたサイズ -->
+      <div class="r58-name">${c.name}　様</div>
+
+      <!-- 金額ラベル -->
+      <div class="r58-amt-label">ご領収金額</div>
+
+      <!-- 金額：最重要・最大サイズ・中央 -->
+      <div class="r58-amount">¥${Math.round(amt).toLocaleString()}－</div>
 
       <!-- 但し書き -->
-      <div class="receipt__memo">但し、${note||'商品代として'}</div>
+      <div class="r58-memo">但し、${note||'商品代として'}</div>
 
       <!-- 上記正に -->
-      <div class="receipt__confirm">上記正に領収致しました</div>
+      <div class="r58-confirm">上記正に領収致しました</div>
 
-      <!-- フッター: 会社情報 + 伝票No -->
-      <div class="receipt__footer">
-        <div class="receipt__company">
-          <div class="receipt__company-name">${co.name||''}</div>
+      <!-- 区切り -->
+      <div class="r58-sep"></div>
+
+      <!-- フッター：会社情報(左) + 収入印紙(右) -->
+      <div class="r58-footer">
+        <div class="r58-company">
+          <div class="r58-company-name">${co.name||''}</div>
           ${co.addr?`<div>${co.addr.replace(/^〒?\d{3}-?\d{4}\s*/,'')}</div>`:''}
           ${co.tel?`<div>TEL: ${co.tel}</div>`:''}
           ${co.invoiceNo?`<div>登録番号: ${co.invoiceNo}</div>`:''}
         </div>
-        <div class="receipt__slipno">伝票No<br>${no}</div>
+        <div class="r58-inshi">収　入<br>印　紙</div>
       </div>
+
+      <!-- 伝票No -->
+      <div class="r58-slipno">伝票No: ${no}</div>
 
     </div>`;
   }
