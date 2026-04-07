@@ -226,7 +226,7 @@ tr:hover td{background:var(--cream);}
 #collectPrintContent .collect-stat-val{font-size:14px;font-weight:700;color:#1a1a2e;}
 #collectPrintContent .collect-stat-lbl{font-size:10px;color:#888;}
 
-/* ===== MP-B20 58mm領収書 ===== */
+/* ===== MP-B20 領収書 (window.print専用) ===== */
 .rcpt {
   width: 58mm;
   font-family: 'Noto Sans JP','MS Gothic','Hiragino Sans',sans-serif;
@@ -234,67 +234,47 @@ tr:hover td{background:var(--cream);}
   box-sizing: border-box;
   padding: 2mm 1.5mm 3mm;
   line-height: 1.25;
+  page-break-inside: avoid;
 }
 .rcpt * { box-sizing: border-box; margin: 0; padding: 0; }
-
 .rcpt-title {
-  text-align: center;
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: 6px;
-  border-bottom: 2.5px solid #000;
-  padding-bottom: 3px;
-  margin-bottom: 3px;
+  text-align: center; font-size: 22px; font-weight: 900;
+  letter-spacing: 6px; border-bottom: 2.5px solid #000;
+  padding-bottom: 3px; margin-bottom: 3px;
 }
-.rcpt-date {
-  text-align: right;
-  font-size: 11px;
-  color: #444;
-  margin-bottom: 4px;
-}
-.rcpt-name {
-  font-size: 18px;
-  font-weight: 700;
-  border-bottom: 1.5px solid #444;
-  padding-bottom: 2px;
-  margin-bottom: 5px;
-  display: inline-block;
-}
-.rcpt-amt-lbl {
-  font-size: 11px;
-  color: #888;
-  margin-bottom: 1px;
-}
-.rcpt-amount {
-  font-size: 28px;
-  font-weight: 900;
-  text-align: center;
-  border-bottom: 1.5px solid #444;
-  padding-bottom: 3px;
-  margin-bottom: 5px;
-  letter-spacing: 1px;
-}
+.rcpt-date  { text-align: right; font-size: 11px; color: #444; margin-bottom: 4px; }
+.rcpt-name  { font-size: 18px; font-weight: 700; border-bottom: 1.5px solid #444;
+              padding-bottom: 2px; margin-bottom: 5px; display: inline-block; }
+.rcpt-amt-lbl { font-size: 11px; color: #888; margin-bottom: 1px; }
+.rcpt-amount  { font-size: 28px; font-weight: 900; text-align: center;
+                border-bottom: 1.5px solid #444; padding-bottom: 3px;
+                margin-bottom: 5px; letter-spacing: 1px; }
 .rcpt-memo  { font-size: 13px; margin-bottom: 1px; }
 .rcpt-cfm   { font-size: 12px; color: #222; margin-bottom: 4px; }
 .rcpt-sep   { border-top: 1px solid #ccc; margin: 3px 0; }
-.rcpt-foot  {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-}
+.rcpt-foot  { display: flex; justify-content: space-between; align-items: flex-end; }
 .rcpt-co    { font-size: 11px; color: #333; line-height: 1.55; flex: 1; }
 .rcpt-coname{ font-size: 13px; font-weight: 700; }
 .rcpt-inshi {
-  width: 15mm; height: 15mm;
-  border: 1.5px solid #888;
+  width: 15mm; height: 15mm; border: 1.5px solid #888;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  font-size: 10px; color: #888;
-  text-align: center; line-height: 1.6;
-  flex-shrink: 0; margin-left: 3mm;
-  border-radius: 1px;
+  font-size: 10px; color: #888; text-align: center; line-height: 1.6;
+  flex-shrink: 0; margin-left: 3mm; border-radius: 1px;
 }
 .rcpt-slip  { font-size: 10px; color: #aaa; text-align: right; margin-top: 2px; }
+
+/* 印刷専用: @media print */
+@media print {
+  @page { size: 58mm auto; margin: 0; }
+  body > *:not(.rcpt-printarea) { display: none !important; }
+  .rcpt-printarea {
+    display: block !important;
+    position: fixed; top: 0; left: 0;
+    width: 58mm; margin: 0; padding: 0;
+  }
+  .rcpt { width: 58mm; padding: 1mm; page-break-inside: avoid; }
+}
 
 </style>
 
@@ -3761,113 +3741,59 @@ function showDocModal(){
 // =============================================
 function handlePrint(){
   const co=getCo();
-  if(co.handyModel==='sii_mpb20'&&currentPrintMode==='handy') printToSII();
-  else window.print();
+  const isRcptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
+  if(isRcptHandy && co.handyModel==='sii_mpb20'){
+    // 領収書ハンディ: rcptPrintAreaに内容をコピー → window.print()
+    const src=document.getElementById('rcptContent');
+    const area=document.getElementById('rcptPrintArea');
+    if(!src||!area){window.print();return;}
+    area.innerHTML=src.outerHTML;
+    area.style.display='block';
+    setTimeout(()=>{
+      window.print();
+      setTimeout(()=>{area.innerHTML='';area.style.display='none';},500);
+    },100);
+  } else {
+    window.print();
+  }
 }
-let _libsLoaded=false;
-function loadPrintLibs(){
-  return new Promise(async(resolve,reject)=>{
-    if(_libsLoaded){resolve();return;}
-    try{
-      if(typeof window.jspdf==='undefined') await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-      if(typeof html2canvas==='undefined') await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-      _libsLoaded=true; resolve();
-    }catch(e){reject(e);}
-  });
-}
-function loadScriptPromise(src){
-  return new Promise((resolve,reject)=>{
-    const ex=document.querySelector(`script[src="${src}"]`);
-    if(ex){const ok=src.includes('jspdf')?typeof window.jspdf!=='undefined':typeof html2canvas!=='undefined';if(ok){resolve();return;}}
-    const s=document.createElement('script');s.src=src;s.onload=resolve;
-    s.onerror=()=>reject(new Error('ライブラリ読み込み失敗'));
-    document.head.appendChild(s);
-  });
-}
+
+// SII URL Print Agent (html2canvas廃止・window.print()に統一)
 async function printToSII(){
-  const el=document.getElementById('docContent');
-  if(!el){alert('印刷内容がありません');return;}
-  const siiBtn=document.getElementById('siiPrintBtn');
-  const origHTML=siiBtn?siiBtn.innerHTML:'';
-  if(siiBtn){siiBtn.innerHTML='⏳ 準備中...';siiBtn.disabled=true;}
-  try{
-    await loadPrintLibs();
-    const {jsPDF}=window.jspdf;
-    const isReceiptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
-    let doc;
-    if(isReceiptHandy){
-      // 領収書: .rcpt(58mm=219px)をscale:3でキャプチャ
-      // transformなし → 白紙にならない
-      // 縦向きそのままPDF（回転不要）
-      const sourceEl=el.querySelector('.rcpt');
-      if(!sourceEl){alert('.rcptが見つかりません');return;}
-      const W=219; // 58mm × 3.78px/mm
-      sourceEl.style.width=W+'px';
-      sourceEl.style.maxWidth=W+'px';
-      await new Promise(r=>setTimeout(r,100));
-      const canvas=await html2canvas(sourceEl,{
-        scale:3,
-        useCORS:true,allowTaint:true,
-        backgroundColor:'#ffffff',
-        width:W,windowWidth:280,
-        x:0,y:0,scrollX:0,scrollY:0,
-        logging:false,
-      });
-      sourceEl.style.width='';
-      sourceEl.style.maxWidth='';
-      if(!canvas||canvas.width===0){alert('キャプチャ失敗');return;}
-      // 縦向きそのままPDF
-      // canvas: 幅W*3px, 高さH*3px → imgW=54mm, imgH=54*(H/W)mm
-      const mL=2,mT=3,imgW=54;
-      const imgH=(canvas.height/canvas.width)*imgW;
-      const pageH=imgH+mT+3;
-      doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,Math.max(20,pageH)]});
-      doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
-    }else{
-      const sourceEl=el.querySelector('.doc-preview')||el.querySelector('div')||el;
-      const W=220;
-      sourceEl.style.width=W+'px';sourceEl.style.maxWidth=W+'px';
-      const canvas=await html2canvas(sourceEl,{
-        scale:3,useCORS:true,allowTaint:true,backgroundColor:'#ffffff',
-        width:W,windowWidth:W+30,x:0,y:0,scrollX:0,scrollY:0,logging:false,
-      });
-      sourceEl.style.width='';sourceEl.style.maxWidth='';
-      const mL=2,mT=3,imgW=54;
-      const imgH=(canvas.height/canvas.width)*imgW;
-      doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,Math.max(60,imgH+mT+4)]});
-      doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',mL,mT,imgW,imgH);
-    }
-    const b64=doc.output('datauristring').split(',')[1];
-    const url='siiprintagent://1.0/print?Format=pdf&Data='+encodeURIComponent(b64)+'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
-    if(url.length>3500000){alert('データが大きすぎます');return;}
-    window.location.href=url;
-  }catch(e){console.error(e);alert('印刷エラー: '+e.message);}
-  finally{if(siiBtn){siiBtn.innerHTML=origHTML;siiBtn.disabled=false;}}
+  handlePrint();
 }
+
 async function testPrintSII(){
+  // テスト印刷: シンプルなテキストページ
   const btn=document.getElementById('siiTestBtn');
   if(btn){btn.innerHTML='⏳...';btn.disabled=true;}
-  try{
-    if(typeof window.jspdf==='undefined') await loadScriptPromise('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-    const {jsPDF}=window.jspdf;
-    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:[58,80]});
-    doc.setFontSize(14);doc.setFont('helvetica','bold');
-    doc.text('--- TEST PRINT ---',29,15,{align:'center'});
-    doc.setFontSize(10);doc.setFont('helvetica','normal');
-    doc.text('MP-B20 OK',29,26,{align:'center'});
-    doc.text(new Date().toISOString().slice(0,19),29,34,{align:'center'});
-    doc.setLineWidth(0.4);doc.line(3,39,55,39);
-    doc.setFontSize(16);doc.setFont('helvetica','bold');
-    doc.text('SUCCESS!',29,50,{align:'center'});
-    const b64=doc.output('datauristring').split(',')[1];
-    window.location.href='siiprintagent://1.0/print?Format=pdf&Data='+encodeURIComponent(b64)+'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
-  }catch(e){alert('テスト印刷エラー: '+e.message);}
-  finally{if(btn){btn.innerHTML='🔌 テスト印刷';btn.disabled=false;}}
+  const area=document.getElementById('rcptPrintArea');
+  if(area){
+    area.innerHTML=`<div class="rcpt" style="font-family:monospace;">
+      <div style="text-align:center;font-size:20px;font-weight:900;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px;">TEST PRINT</div>
+      <div style="font-size:14px;margin-bottom:4px;">MP-B20 接続テスト</div>
+      <div style="font-size:12px;color:#444;">${new Date().toLocaleString('ja-JP')}</div>
+      <div style="border-top:1px solid #ccc;margin:8px 0;"></div>
+      <div style="font-size:16px;font-weight:700;text-align:center;">印刷成功 ✓</div>
+    </div>`;
+    area.style.display='block';
+    setTimeout(()=>{
+      window.print();
+      setTimeout(()=>{area.innerHTML='';area.style.display='none';if(btn){btn.innerHTML='🔌 テスト印刷';btn.disabled=false;}},500);
+    },100);
+  } else {
+    window.print();
+    if(btn){btn.innerHTML='🔌 テスト印刷';btn.disabled=false;}
+  }
 }
+
 function buildMinimalPDF(t){return null;}
-function loadScript(s){return loadScriptPromise(s);}
-function printToMPB20(){printToSII();}
+function loadScript(s){return Promise.resolve();}
+function printToMPB20(){handlePrint();}
 function extractPrintLines(el){return[];}
+function loadPrintLibs(){return Promise.resolve();}
+function loadScriptPromise(src){return Promise.resolve();}
+
 function setPrintMode(mode){
   currentPrintMode=mode;
   renderDocContent();
@@ -4093,10 +4019,9 @@ function genReceiptDoc(data,co){
     </div>`;
 
   if(currentPrintMode==='handy'){
-    // 領収書ハンディ版 - .rcptクラス（MP-B20最適化）
-    // width:58mm縦向き・transform不使用（html2canvas白紙防止）
-    // html2canvas scale:3 → 縦向きそのままPDF → MP-B20送信
-    return`<div class="rcpt">
+    // 領収書ハンディ版 - .rcptクラス
+    // width:58mm縦向き / window.print()専用 / html2canvas不使用
+    return`<div class="rcpt" id="rcptContent">
 
       <div class="rcpt-title">領　収　書</div>
       <div class="rcpt-date">${fmtDateJP(date)}</div>
@@ -6958,5 +6883,9 @@ function showConfirm(msg, onOk, opts){
 function closeModal(id){const el=document.getElementById(id);if(el)el.classList.remove('open');}
 document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 </script>
+
+<!-- MP-B20 領収書印刷専用エリア（画面非表示・印刷時のみ表示） -->
+<div id="rcptPrintArea" class="rcpt-printarea" style="display:none;"></div>
+
 </body>
 </html>
