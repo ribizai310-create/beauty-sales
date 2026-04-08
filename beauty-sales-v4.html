@@ -3692,13 +3692,20 @@ function handlePrint(){
   const co=getCo();
   const isRcptHandy=(currentDocType==='receipt'&&currentPrintMode==='handy');
   if(isRcptHandy && co.handyModel==='sii_mpb20'){
-    printReceiptNewWindow();
+    printReceiptSII();
   } else {
     window.print();
   }
 }
 
-function printReceiptNewWindow(){
+// =============================================
+// SII URL Print Agent で領収書を印刷
+// 縦長レシートHTMLをBase64化してURLスキームで送信
+// ・width:58mm固定・高さauto・transformなし
+// ・position:absolute禁止・heightなし
+// ・1カラム縦積みブロック構成
+// =============================================
+function printReceiptSII(){
   if(!currentDocData){alert('領収書データがありません');return;}
   const d=currentDocData;
   const cu=getCust(d.custId);
@@ -3706,82 +3713,158 @@ function printReceiptNewWindow(){
   const no=genNo('R');
   const addr=(co.addr||'').replace(/^〒?\d{3}-?\d{4}\s*/,'');
 
-  const html=
-    '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">'
-   +'<style>'
-   +'*{box-sizing:border-box;margin:0;padding:0;}'
-   +'body{font-family:"Noto Sans JP","MS Gothic","Hiragino Sans",sans-serif;'
-   +'background:#fff;width:58mm;padding:2mm 1.5mm 3mm;line-height:1.25;}'
-   +'.ti{text-align:center;font-size:22px;font-weight:900;letter-spacing:6px;'
-   +'border-bottom:2.5px solid #000;padding-bottom:3px;margin-bottom:3px;}'
-   +'.dt{text-align:right;font-size:11px;color:#444;margin-bottom:4px;}'
-   +'.nm{font-size:18px;font-weight:700;border-bottom:1.5px solid #444;'
-   +'padding-bottom:2px;margin-bottom:5px;display:inline-block;}'
-   +'.al{font-size:11px;color:#888;margin-bottom:1px;}'
-   +'.am{font-size:28px;font-weight:900;text-align:center;border-bottom:1.5px solid #444;'
-   +'padding-bottom:3px;margin-bottom:5px;letter-spacing:1px;}'
-   +'.mo{font-size:13px;margin-bottom:1px;}'
-   +'.cf{font-size:12px;color:#222;margin-bottom:4px;}'
-   +'.sp{border-top:1px solid #ccc;margin:3px 0;}'
-   +'.ft{display:flex;justify-content:space-between;align-items:flex-end;}'
-   +'.co{font-size:11px;color:#333;line-height:1.55;flex:1;}'
-   +'.cn{font-size:13px;font-weight:700;}'
-   +'.is{width:15mm;height:15mm;border:1.5px solid #888;display:flex;'
-   +'flex-direction:column;align-items:center;justify-content:center;'
-   +'font-size:10px;color:#888;text-align:center;line-height:1.6;'
-   +'flex-shrink:0;margin-left:3mm;border-radius:1px;}'
-   +'.sl{font-size:10px;color:#aaa;text-align:right;margin-top:2px;}'
-   +'@media print{@page{size:58mm auto;margin:0;}body{padding:1mm;}}'
-   +'</style></head><body>'
-   +'<div class="ti">領\u3000収\u3000書</div>'
-   +'<div class="dt">'+fmtDateJP(d.date)+'</div>'
-   +'<div class="nm">'+cu.name+'\u3000様</div>'
-   +'<div class="al">ご領収金額</div>'
-   +'<div class="am">¥'+Math.round(d.amt).toLocaleString()+'－</div>'
-   +'<div class="mo">但し、'+(d.note||'商品代として')+'</div>'
-   +'<div class="cf">上記正に領収致しました</div>'
-   +'<div class="sp"></div>'
-   +'<div class="ft">'
-   +'<div class="co">'
-   +'<div class="cn">'+(co.name||'')+'</div>'
-   +(addr?'<div>'+addr+'</div>':'')
-   +(co.tel?'<div>TEL: '+co.tel+'</div>':'')
-   +(co.invoiceNo?'<div>登録番号: '+co.invoiceNo+'</div>':'')
-   +'</div>'
-   +'<div class="is">収\u3000入<br>印\u3000紙</div>'
-   +'</div>'
-   +'<div class="sl">伝票No: '+no+'</div>'
-   +'<script>window.onload=function(){window.print();setTimeout(function(){window.close();},800);};<\/script>'
-   +'</body></html>';
+  // 縦長レシートHTML（SII URL Print Agent用）
+  const lines=[];
+  lines.push('<!DOCTYPE html>');
+  lines.push('<html lang="ja"><head>');
+  lines.push('<meta charset="UTF-8">');
+  lines.push('<meta name="viewport" content="width=58mm">');
+  lines.push('<style>');
+  lines.push('* { box-sizing: border-box; margin: 0; padding: 0; }');
+  lines.push('body {');
+  lines.push('  width: 58mm;');
+  lines.push('  margin: 0;');
+  lines.push('  padding: 4mm;');
+  lines.push('  font-family: "Noto Sans JP","MS Gothic","Hiragino Sans",sans-serif;');
+  lines.push('  font-size: 12px;');
+  lines.push('  line-height: 1.6;');
+  lines.push('  word-break: break-all;');
+  lines.push('}');
+  lines.push('.receipt { width: 100%; }');
+  lines.push('.section { margin-bottom: 4mm; }');
+  lines.push('.title {');
+  lines.push('  font-size: 18px;');
+  lines.push('  font-weight: bold;');
+  lines.push('  letter-spacing: 8px;');
+  lines.push('  border-bottom: 2px solid #000;');
+  lines.push('  padding-bottom: 2mm;');
+  lines.push('  margin-bottom: 3mm;');
+  lines.push('}');
+  lines.push('.label { font-size: 10px; color: #666; }');
+  lines.push('.name {');
+  lines.push('  font-size: 16px;');
+  lines.push('  font-weight: bold;');
+  lines.push('  border-bottom: 1px solid #333;');
+  lines.push('  padding-bottom: 1mm;');
+  lines.push('}');
+  lines.push('.total {');
+  lines.push('  font-size: 20px;');
+  lines.push('  font-weight: bold;');
+  lines.push('  text-align: center;');
+  lines.push('  margin: 6mm 0;');
+  lines.push('  border-top: 1px solid #000;');
+  lines.push('  border-bottom: 1px solid #000;');
+  lines.push('  padding: 2mm 0;');
+  lines.push('}');
+  lines.push('.sep { border-top: 1px dashed #999; margin: 3mm 0; }');
+  lines.push('.inshi {');
+  lines.push('  width: 20mm;');
+  lines.push('  height: 20mm;');
+  lines.push('  border: 1px solid #999;');
+  lines.push('  display: inline-block;');
+  lines.push('  vertical-align: top;');
+  lines.push('  text-align: center;');
+  lines.push('  font-size: 10px;');
+  lines.push('  color: #999;');
+  lines.push('  padding-top: 5mm;');
+  lines.push('  line-height: 1.4;');
+  lines.push('}');
+  lines.push('.footer {');
+  lines.push('  margin-top: 10mm;');
+  lines.push('  padding-bottom: 20mm;');
+  lines.push('  font-size: 10px;');
+  lines.push('}');
+  lines.push('</style></head><body>');
+  lines.push('<div class="receipt">');
 
-  const w=window.open('','_blank','width=320,height=500,menubar=no,toolbar=no,location=no,scrollbars=no');
-  if(!w){
-    alert('ポップアップがブロックされています。\nブラウザの設定でこのページのポップアップを許可してください。');
-    return;
+  // タイトル
+  lines.push('<div class="title">領　収　書</div>');
+
+  // 日付・宛名
+  lines.push('<div class="section">');
+  lines.push('<div class="label">日付</div>');
+  lines.push('<div>'+fmtDateJP(d.date)+'</div>');
+  lines.push('</div>');
+
+  lines.push('<div class="section">');
+  lines.push('<div class="label">宛名</div>');
+  lines.push('<div class="name">'+cu.name+'　様</div>');
+  lines.push('</div>');
+
+  // 金額（最重要・大きく）
+  lines.push('<div class="total">¥'+Math.round(d.amt).toLocaleString()+'－</div>');
+
+  // 但し書き
+  lines.push('<div class="section">');
+  lines.push('<div>但し、'+(d.note||'商品代として')+'</div>');
+  lines.push('<div>上記正に領収致しました</div>');
+  lines.push('</div>');
+
+  lines.push('<div class="sep"></div>');
+
+  // 収入印紙
+  lines.push('<div class="section">');
+  lines.push('<div class="inshi">収&nbsp;入<br>印&nbsp;紙</div>');
+  lines.push('</div>');
+
+  lines.push('<div class="sep"></div>');
+
+  // 発行者情報
+  lines.push('<div class="footer">');
+  if(co.name) lines.push('<div><strong>'+co.name+'</strong></div>');
+  if(addr)    lines.push('<div>'+addr+'</div>');
+  if(co.tel)  lines.push('<div>TEL: '+co.tel+'</div>');
+  if(co.invoiceNo) lines.push('<div>登録番号: '+co.invoiceNo+'</div>');
+  lines.push('<div>伝票No: '+no+'</div>');
+  lines.push('</div>');
+
+  lines.push('</div>');
+  lines.push('</body></html>');
+
+  const html=lines.join('\n');
+
+  // Base64エンコードしてSII URL Print Agentに送信
+  let b64;
+  try{
+    b64=btoa(unescape(encodeURIComponent(html)));
+  }catch(e){
+    alert('エンコードエラー: '+e.message);return;
   }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+
+  const url='siiprintagent://1.0/print?Format=html'
+    +'&Data='+encodeURIComponent(b64)
+    +'&FitToWidth=yes'
+    +'&CutFeed=yes'
+    +'&ErrorDialog=yes';
+
+  if(url.length>3500000){alert('データが大きすぎます');return;}
+  window.location.href=url;
 }
 
 function testPrintSII(){
-  const w=window.open('','_blank','width=320,height=300,menubar=no,toolbar=no,location=no');
-  if(!w){alert('ポップアップをブロックされています');return;}
-  const html=
-    '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-   +'<style>*{margin:0;padding:0;box-sizing:border-box;}'
-   +'body{font-family:"MS Gothic",monospace;width:58mm;padding:2mm;}'
-   +'@media print{@page{size:58mm auto;margin:0;}}</style></head><body>'
-   +'<div style="text-align:center;font-size:18px;font-weight:900;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px;">TEST PRINT</div>'
-   +'<div style="font-size:13px;margin-bottom:4px;">MP-B20 接続テスト</div>'
-   +'<div style="font-size:11px;color:#444;">'+new Date().toLocaleString('ja-JP')+'</div>'
-   +'<div style="border-top:1px solid #ccc;margin:8px 0;"></div>'
-   +'<div style="font-size:16px;font-weight:700;text-align:center;">印刷成功</div>'
-   +'<script>window.onload=function(){window.print();setTimeout(function(){window.close();},800);};<\/script>'
-   +'</body></html>';
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  // テスト印刷（シンプルテキスト）
+  const btn=document.getElementById('siiTestBtn');
+  if(btn){btn.innerHTML='⏳...';btn.disabled=true;}
+  const lines=[];
+  lines.push('<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">');
+  lines.push('<style>');
+  lines.push('body{width:58mm;margin:0;padding:4mm;font-family:"MS Gothic",monospace;font-size:12px;line-height:1.6;}');
+  lines.push('.footer{padding-bottom:20mm;}');
+  lines.push('</style></head><body>');
+  lines.push('<div style="font-size:16px;font-weight:bold;border-bottom:2px solid #000;padding-bottom:2mm;margin-bottom:3mm;">TEST PRINT</div>');
+  lines.push('<div>MP-B20 接続テスト</div>');
+  lines.push('<div>'+new Date().toLocaleString('ja-JP')+'</div>');
+  lines.push('<div style="border-top:1px dashed #999;margin:3mm 0;"></div>');
+  lines.push('<div style="font-size:16px;font-weight:bold;">印刷成功</div>');
+  lines.push('<div class="footer"></div>');
+  lines.push('</body></html>');
+  const html=lines.join('\n');
+  let b64;
+  try{b64=btoa(unescape(encodeURIComponent(html)));}
+  catch(e){alert('エラー: '+e.message);if(btn){btn.innerHTML='🔌 テスト印刷';btn.disabled=false;}return;}
+  const url='siiprintagent://1.0/print?Format=html&Data='+encodeURIComponent(b64)+'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
+  window.location.href=url;
+  if(btn){setTimeout(()=>{btn.innerHTML='🔌 テスト印刷';btn.disabled=false;},2000);}
 }
 
 function printToSII(){handlePrint();}
