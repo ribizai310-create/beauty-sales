@@ -3698,13 +3698,12 @@ function handlePrint(){
   }
 }
 
-// =============================================
-// SII URL Print Agent で領収書を印刷
-// 縦長レシートHTMLをBase64化してURLスキームで送信
-// ・width:58mm固定・高さauto・transformなし
-// ・position:absolute禁止・heightなし
-// ・1カラム縦積みブロック構成
-// =============================================
+// ============================================================
+// SII URL Print Agent 正式URL形式:
+// siiprintagent://1.0/print?Format=html&Data=BASE64&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes
+// ※パラメータは & 区切り（カンマ区切りは E_INVALID_QUERY_FORMAT エラー）
+// ※Data= はHTMLをBase64エンコードした値
+// ============================================================
 function printReceiptSII(){
   if(!currentDocData){alert('領収書データがありません');return;}
   const d=currentDocData;
@@ -3713,117 +3712,81 @@ function printReceiptSII(){
   const no=genNo('R');
   const addr=(co.addr||'').replace(/^〒?\d{3}-?\d{4}\s*/,'');
 
-  // 縦長レシートHTML（SII URL Print Agent用）
+  // 58mm縦長レシートHTML
+  // ・width:58mm固定・高さauto・transformなし
+  // ・position:absolute禁止・1カラム縦積み
   const lines=[];
   lines.push('<!DOCTYPE html>');
   lines.push('<html lang="ja"><head>');
   lines.push('<meta charset="UTF-8">');
   lines.push('<meta name="viewport" content="width=58mm">');
   lines.push('<style>');
-  lines.push('* { box-sizing: border-box; margin: 0; padding: 0; }');
-  lines.push('body {');
-  lines.push('  width: 58mm;');
-  lines.push('  margin: 0;');
-  lines.push('  padding: 4mm;');
-  lines.push('  font-family: "Noto Sans JP","MS Gothic","Hiragino Sans",sans-serif;');
-  lines.push('  font-size: 12px;');
-  lines.push('  line-height: 1.6;');
-  lines.push('  word-break: break-all;');
+  lines.push('*{box-sizing:border-box;margin:0;padding:0;}');
+  lines.push('body{');
+  lines.push('  width:58mm;');
+  lines.push('  margin:0;');
+  lines.push('  padding:4mm;');
+  lines.push('  font-family:"Noto Sans JP","MS Gothic","Hiragino Sans",sans-serif;');
+  lines.push('  font-size:12px;');
+  lines.push('  line-height:1.6;');
+  lines.push('  word-break:break-all;');
   lines.push('}');
-  lines.push('.receipt { width: 100%; }');
-  lines.push('.section { margin-bottom: 4mm; }');
-  lines.push('.title {');
-  lines.push('  font-size: 18px;');
-  lines.push('  font-weight: bold;');
-  lines.push('  letter-spacing: 8px;');
-  lines.push('  border-bottom: 2px solid #000;');
-  lines.push('  padding-bottom: 2mm;');
-  lines.push('  margin-bottom: 3mm;');
+  lines.push('.receipt{width:100%;}');
+  lines.push('.section{margin-bottom:4mm;}');
+  lines.push('.title{');
+  lines.push('  font-size:18px;font-weight:bold;letter-spacing:8px;');
+  lines.push('  border-bottom:2px solid #000;');
+  lines.push('  padding-bottom:2mm;margin-bottom:3mm;');
   lines.push('}');
-  lines.push('.label { font-size: 10px; color: #666; }');
-  lines.push('.name {');
-  lines.push('  font-size: 16px;');
-  lines.push('  font-weight: bold;');
-  lines.push('  border-bottom: 1px solid #333;');
-  lines.push('  padding-bottom: 1mm;');
+  lines.push('.label{font-size:10px;color:#666;}');
+  lines.push('.name{font-size:16px;font-weight:bold;}');
+  lines.push('.total{');
+  lines.push('  font-size:20px;font-weight:bold;text-align:center;');
+  lines.push('  border-top:1px solid #000;border-bottom:1px solid #000;');
+  lines.push('  padding:2mm 0;margin:6mm 0;');
   lines.push('}');
-  lines.push('.total {');
-  lines.push('  font-size: 20px;');
-  lines.push('  font-weight: bold;');
-  lines.push('  text-align: center;');
-  lines.push('  margin: 6mm 0;');
-  lines.push('  border-top: 1px solid #000;');
-  lines.push('  border-bottom: 1px solid #000;');
-  lines.push('  padding: 2mm 0;');
+  lines.push('.sep{border-top:1px dashed #999;margin:3mm 0;}');
+  lines.push('.inshi{');
+  lines.push('  width:20mm;height:20mm;border:1px solid #999;');
+  lines.push('  display:inline-block;vertical-align:top;');
+  lines.push('  text-align:center;font-size:10px;color:#999;');
+  lines.push('  padding-top:5mm;line-height:1.4;');
   lines.push('}');
-  lines.push('.sep { border-top: 1px dashed #999; margin: 3mm 0; }');
-  lines.push('.inshi {');
-  lines.push('  width: 20mm;');
-  lines.push('  height: 20mm;');
-  lines.push('  border: 1px solid #999;');
-  lines.push('  display: inline-block;');
-  lines.push('  vertical-align: top;');
-  lines.push('  text-align: center;');
-  lines.push('  font-size: 10px;');
-  lines.push('  color: #999;');
-  lines.push('  padding-top: 5mm;');
-  lines.push('  line-height: 1.4;');
-  lines.push('}');
-  lines.push('.footer {');
-  lines.push('  margin-top: 10mm;');
-  lines.push('  padding-bottom: 20mm;');
-  lines.push('  font-size: 10px;');
-  lines.push('}');
+  lines.push('.footer{margin-top:10mm;padding-bottom:20mm;font-size:10px;}');
   lines.push('</style></head><body>');
   lines.push('<div class="receipt">');
-
-  // タイトル
-  lines.push('<div class="title">領　収　書</div>');
-
-  // 日付・宛名
+  lines.push('<div class="title">\u9818\u3000\u53ce\u3000\u66f8</div>');
   lines.push('<div class="section">');
-  lines.push('<div class="label">日付</div>');
+  lines.push('<div class="label">\u65e5\u4ed8</div>');
   lines.push('<div>'+fmtDateJP(d.date)+'</div>');
   lines.push('</div>');
-
   lines.push('<div class="section">');
-  lines.push('<div class="label">宛名</div>');
-  lines.push('<div class="name">'+cu.name+'　様</div>');
+  lines.push('<div class="label">\u5b9b\u540d</div>');
+  lines.push('<div class="name">'+cu.name+'\u3000\u69d8</div>');
   lines.push('</div>');
-
-  // 金額（最重要・大きく）
-  lines.push('<div class="total">¥'+Math.round(d.amt).toLocaleString()+'－</div>');
-
-  // 但し書き
+  lines.push('<div class="total">\uffe5'+Math.round(d.amt).toLocaleString()+'\uff0d</div>');
   lines.push('<div class="section">');
-  lines.push('<div>但し、'+(d.note||'商品代として')+'</div>');
-  lines.push('<div>上記正に領収致しました</div>');
+  lines.push('<div>\u4f46\u3057\u3001'+(d.note||'\u5546\u54c1\u4ee3\u3068\u3057\u3066')+'</div>');
+  lines.push('<div>\u4e0a\u8a18\u6b63\u306b\u9818\u53ce\u81f4\u3057\u307e\u3057\u305f</div>');
   lines.push('</div>');
-
   lines.push('<div class="sep"></div>');
-
-  // 収入印紙
   lines.push('<div class="section">');
-  lines.push('<div class="inshi">収&nbsp;入<br>印&nbsp;紙</div>');
+  lines.push('<div class="inshi">\u53ce\u3000\u5165<br>\u5370\u3000\u7d19</div>');
   lines.push('</div>');
-
   lines.push('<div class="sep"></div>');
-
-  // 発行者情報
   lines.push('<div class="footer">');
-  if(co.name) lines.push('<div><strong>'+co.name+'</strong></div>');
-  if(addr)    lines.push('<div>'+addr+'</div>');
-  if(co.tel)  lines.push('<div>TEL: '+co.tel+'</div>');
-  if(co.invoiceNo) lines.push('<div>登録番号: '+co.invoiceNo+'</div>');
-  lines.push('<div>伝票No: '+no+'</div>');
+  if(co.name)      lines.push('<div><strong>'+co.name+'</strong></div>');
+  if(addr)         lines.push('<div>'+addr+'</div>');
+  if(co.tel)       lines.push('<div>TEL: '+co.tel+'</div>');
+  if(co.invoiceNo) lines.push('<div>\u767b\u9332\u756a\u53f7: '+co.invoiceNo+'</div>');
+  lines.push('<div>\u4f1d\u7968No: '+no+'</div>');
   lines.push('</div>');
-
   lines.push('</div>');
   lines.push('</body></html>');
 
   const html=lines.join('\n');
 
-  // Base64エンコードしてSII URL Print Agentに送信
+  // Base64エンコード（UTF-8対応）
   let b64;
   try{
     b64=btoa(unescape(encodeURIComponent(html)));
@@ -3831,40 +3794,56 @@ function printReceiptSII(){
     alert('エンコードエラー: '+e.message);return;
   }
 
-  const url='siiprintagent://1.0/print?Format=html'
-    +'&Data='+encodeURIComponent(b64)
+  // 正しいURL形式: & 区切り / Format=html / Data=BASE64
+  const url='siiprintagent://1.0/print'
+    +'?Format=html'
+    +'&Data='+b64
     +'&FitToWidth=yes'
     +'&CutFeed=yes'
     +'&ErrorDialog=yes';
 
-  if(url.length>3500000){alert('データが大きすぎます');return;}
   window.location.href=url;
 }
 
+// テスト印刷（接続確認用）
 function testPrintSII(){
-  // テスト印刷（シンプルテキスト）
   const btn=document.getElementById('siiTestBtn');
   if(btn){btn.innerHTML='⏳...';btn.disabled=true;}
+
   const lines=[];
   lines.push('<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">');
   lines.push('<style>');
+  lines.push('*{box-sizing:border-box;margin:0;padding:0;}');
   lines.push('body{width:58mm;margin:0;padding:4mm;font-family:"MS Gothic",monospace;font-size:12px;line-height:1.6;}');
   lines.push('.footer{padding-bottom:20mm;}');
   lines.push('</style></head><body>');
   lines.push('<div style="font-size:16px;font-weight:bold;border-bottom:2px solid #000;padding-bottom:2mm;margin-bottom:3mm;">TEST PRINT</div>');
-  lines.push('<div>MP-B20 接続テスト</div>');
+  lines.push('<div>MP-B20 \u63a5\u7d9a\u30c6\u30b9\u30c8</div>');
   lines.push('<div>'+new Date().toLocaleString('ja-JP')+'</div>');
   lines.push('<div style="border-top:1px dashed #999;margin:3mm 0;"></div>');
-  lines.push('<div style="font-size:16px;font-weight:bold;">印刷成功</div>');
+  lines.push('<div style="font-size:16px;font-weight:bold;">\u5370\u5237\u6210\u529f</div>');
   lines.push('<div class="footer"></div>');
   lines.push('</body></html>');
+
   const html=lines.join('\n');
   let b64;
-  try{b64=btoa(unescape(encodeURIComponent(html)));}
-  catch(e){alert('エラー: '+e.message);if(btn){btn.innerHTML='🔌 テスト印刷';btn.disabled=false;}return;}
-  const url='siiprintagent://1.0/print?Format=html&Data='+encodeURIComponent(b64)+'&FitToWidth=yes&CutFeed=yes&ErrorDialog=yes';
+  try{
+    b64=btoa(unescape(encodeURIComponent(html)));
+  }catch(e){
+    alert('\u30a8\u30e9\u30fc: '+e.message);
+    if(btn){btn.innerHTML='\ud83d\udd0c \u30c6\u30b9\u30c8\u5370\u5237';btn.disabled=false;}
+    return;
+  }
+
+  const url='siiprintagent://1.0/print'
+    +'?Format=html'
+    +'&Data='+b64
+    +'&FitToWidth=yes'
+    +'&CutFeed=yes'
+    +'&ErrorDialog=yes';
+
   window.location.href=url;
-  if(btn){setTimeout(()=>{btn.innerHTML='🔌 テスト印刷';btn.disabled=false;},2000);}
+  if(btn){setTimeout(()=>{btn.innerHTML='\ud83d\udd0c \u30c6\u30b9\u30c8\u5370\u5237';btn.disabled=false;},2000);}
 }
 
 function printToSII(){handlePrint();}
