@@ -1,0 +1,25 @@
+{
+  "name": "理美容卸売 販売管理システム",
+  "short_name": "理美材サトー",
+  "description": "理美容材料卸売 販売管理システム v4",
+  "start_url": "./beauty-sales-v4.html",
+  "display": "standalone",
+  "background_color": "#f5f0e8",
+  "theme_color": "#1a1a2e",
+  "orientation": "portrait",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
