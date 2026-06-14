@@ -5218,7 +5218,7 @@ function genReceiptDoc(data,co){
         <!-- ① タイトル行 -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3mm;">
           <div style="display:flex;align-items:center;">
-            <div style="background:${bgHdr};color:white;padding:5px 20px;font-size:18px;font-weight:700;letter-spacing:8px;">領　収　書</div>
+            <div style="background:${bgHdr};color:white;padding:5px 20px;font-size:18px;font-weight:700;letter-spacing:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">領　収　書</div>
             ${ctrlBadge}
           </div>
           <div style="text-align:right;font-size:9.5px;color:#555;line-height:1.9;">
@@ -5243,7 +5243,7 @@ function genReceiptDoc(data,co){
 
         <!-- ③ 金額ブロック -->
         <div style="border:2px solid #1a1a2e;display:flex;align-items:stretch;margin-bottom:2.5mm;">
-          <div style="background:${bgHdr};color:white;padding:8px 16px;display:flex;align-items:center;font-size:14px;font-weight:700;letter-spacing:4px;white-space:nowrap;">金&nbsp;&nbsp;額</div>
+          <div style="background:${bgHdr};color:white;padding:8px 16px;display:flex;align-items:center;font-size:14px;font-weight:700;letter-spacing:4px;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact;">金&nbsp;&nbsp;額</div>
           <div style="flex:1;display:flex;align-items:center;padding:6px 18px;">
             <span style="font-size:28px;font-weight:900;letter-spacing:3px;">¥${Math.round(amt).toLocaleString()}－</span>
           </div>
@@ -5290,22 +5290,29 @@ function genReceiptDoc(data,co){
     return `<div style="width:190mm;font-family:'Noto Sans JP',sans-serif;background:white;box-sizing:border-box;">
       <style>
         @media print{
-          .receipt-wrapper{page-break-inside:avoid;}
-          .receipt-top{page-break-after:avoid;}
-          .receipt-bottom{page-break-before:avoid;}
+          .receipt-wrapper{
+            transform:scale(0.88);
+            transform-origin:top center;
+            width:114%!important;
+            -webkit-print-color-adjust:exact!important;
+            print-color-adjust:exact!important;
+          }
+          .receipt-top,.receipt-bottom{page-break-inside:avoid!important;}
         }
       </style>
-      <!-- 上段: お客様渡し -->
-      <div class="receipt-top" style="page-break-inside:avoid;">
-        ${halfSlip(false)}
-      </div>
-      <!-- 中央の破線（切り取り線） -->
-      <div style="border-top:1.5px dashed #aaa;margin:0 4mm;display:flex;align-items:center;justify-content:center;">
-        <span style="font-size:8px;color:#bbb;background:white;padding:0 6px;margin-top:-9px;">✂ 切り取り線</span>
-      </div>
-      <!-- 下段: 控え -->
-      <div class="receipt-bottom" style="page-break-inside:avoid;">
-        ${halfSlip(true)}
+      <div class="receipt-wrapper">
+        <!-- 上段: お客様渡し -->
+        <div class="receipt-top">
+          ${halfSlip(false)}
+        </div>
+        <!-- 中央の破線（切り取り線） -->
+        <div style="border-top:1.5px dashed #aaa;margin:0 4mm;display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:8px;color:#bbb;background:white;padding:0 6px;margin-top:-9px;">✂ 切り取り線</span>
+        </div>
+        <!-- 下段: 控え -->
+        <div class="receipt-bottom">
+          ${halfSlip(true)}
+        </div>
       </div>
     </div>`;
   }
