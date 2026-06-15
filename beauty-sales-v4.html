@@ -1984,7 +1984,16 @@ const DB = {
   set:(k,v,co)=>localStorage.setItem((co||activeCo)+'_'+k,JSON.stringify(v)),
   getSingle:(k,co)=>JSON.parse(localStorage.getItem((co||activeCo)+'_'+k)||'null'),
   setSingle:(k,v,co)=>localStorage.setItem((co||activeCo)+'_'+k,JSON.stringify(v)),
-  nextId:(k,co)=>{const id=parseInt(localStorage.getItem((co||activeCo)+'_'+k+'_seq')||'0')+1;localStorage.setItem((co||activeCo)+'_'+k+'_seq',id);return id;},
+  nextId:(k,co)=>{
+    // 既存レコードの最大IDを確認してシーケンスより大きければ同期
+    const arr=JSON.parse(localStorage.getItem((co||activeCo)+'_'+k)||'[]');
+    const maxExisting=arr.reduce((m,x)=>Math.max(m,parseInt(x.id)||0),0);
+    const seqKey=(co||activeCo)+'_'+k+'_seq';
+    const seqVal=parseInt(localStorage.getItem(seqKey)||'0');
+    const nextVal=Math.max(maxExisting,seqVal)+1;
+    localStorage.setItem(seqKey,nextVal);
+    return nextVal;
+  },
   global:(k)=>JSON.parse(localStorage.getItem('global_'+k)||'null'),
   setGlobal:(k,v)=>localStorage.setItem('global_'+k,JSON.stringify(v))
 };
@@ -2101,6 +2110,17 @@ function sortCustomers(custs){
 function genNo(prefix){return prefix+new Date().toISOString().replace(/[-:.TZ]/g,'').substring(0,14);}
 
 function refreshAll(){
+  // 起動時・復元後にシーケンス番号を全データの最大IDに同期
+  ['A','B'].forEach(co=>{
+    ['customers','products','deliveries','payments','estimates'].forEach(k=>{
+      const arr=DB.get(k,co);
+      if(!arr||!arr.length) return;
+      const maxId=arr.reduce((m,x)=>Math.max(m,parseInt(x.id)||0),0);
+      const seqKey=co+'_'+k+'_seq';
+      const cur=parseInt(localStorage.getItem(seqKey)||'0');
+      if(maxId>cur) localStorage.setItem(seqKey,maxId);
+    });
+  });
   refreshSelects();
   renderDashboard();
   renderCustomers();
@@ -6412,6 +6432,18 @@ function executeMigrate(){
     if(selected.includes('deliveries')        && c.deliveries)        DB.set('deliveries',c.deliveries,co);
     if(selected.includes('payments')          && c.payments)          DB.set('payments',c.payments,co);
     if(selected.includes('migrationBalances') && c.migrationBalances) DB.set('migrationBalances',c.migrationBalances,co);
+  });
+
+  // ★ シーケンス番号を全データの最大IDに同期（重複ID防止）
+  ['A','B'].forEach(co=>{
+    ['customers','products','deliveries','payments','estimates'].forEach(k=>{
+      const arr=DB.get(k,co);
+      if(!arr||!arr.length) return;
+      const maxId=arr.reduce((m,x)=>Math.max(m,parseInt(x.id)||0),0);
+      const seqKey=co+'_'+k+'_seq';
+      const cur=parseInt(localStorage.getItem(seqKey)||'0');
+      if(maxId>cur) localStorage.setItem(seqKey,maxId);
+    });
   });
 
   closeModal('migrateModal');
