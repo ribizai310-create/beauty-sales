@@ -2189,9 +2189,9 @@ function _psRender(idx,q){
 }
 // 規格を直接セット（インライン検索で規格名がヒットした場合）
 function psSelWithVariant(idx, prodId, variantName, variantPrice){
-  var p=DB.get('products').find(function(x){return x.id===prodId;});if(!p)return;
+  var p=DB.get('products').find(function(x){return String(x.id)===String(prodId);});if(!p)return;
   var custId=parseInt((document.getElementById('delCustomer')||{value:0}).value)||0;
-  var cp=(p.contractPrices||[]).find(function(x){return x.custId===custId;});
+  var cp=(p.contractPrices||[]).find(function(x){return String(x.custId)===String(custId);});
   var displayName=p.name+'　'+variantName+(cp?' 💰':'');
   var inp=document.getElementById('dname_'+idx);
   if(inp){inp.value=displayName;inp.classList.add('psel');}
@@ -2205,9 +2205,9 @@ function psSelWithVariant(idx, prodId, variantName, variantPrice){
 }
 
 function psSel(idx,prodId){
-  var p=DB.get('products').find(function(x){return x.id===prodId;});if(!p)return;
+  var p=DB.get('products').find(function(x){return String(x.id)===String(prodId);});if(!p)return;
   var custId=parseInt((document.getElementById('delCustomer')||{value:0}).value)||0;
-  var cp=(p.contractPrices||[]).find(function(x){return x.custId===custId;});
+  var cp=(p.contractPrices||[]).find(function(x){return String(x.custId)===String(custId);});
   var price=cp?cp.price:p.price;
   var drop=document.getElementById('psd_'+idx);if(drop)drop.style.display='none';
   var clr=document.getElementById('pcl_'+idx);if(clr)clr.style.display='block';
@@ -3111,8 +3111,13 @@ function openVariantModal(idx, prod, custId, contractPrice){
 
   const list = document.getElementById('variantModalList');
   list.innerHTML = '';
-  // 五十音・数字・アルファベット順にソート
-  const sortedVariants = (prod.variants||[]).slice().sort((a,b)=>{
+  // 五十音・数字・アルファベット順にソート（重複除去）
+  const seen = new Set();
+  const sortedVariants = (prod.variants||[]).filter(v=>{
+    if(seen.has(v.name)) return false;
+    seen.add(v.name);
+    return true;
+  }).slice().sort((a,b)=>{
     const na=normalizeKana(a.name), nb=normalizeKana(b.name);
     return na.localeCompare(nb,'ja',{numeric:true,sensitivity:'base'});
   });
@@ -3163,11 +3168,11 @@ function openVariantModal(idx, prod, custId, contractPrice){
 }
 
 function pickProduct(prodId){
-  const p = DB.get('products').find(x=>x.id===prodId);
+  const p = DB.get('products').find(x=>String(x.id)===String(prodId));
   if(!p || pickerTargetIdx < 0) return;
   const idx = pickerTargetIdx;
   const custId = parseInt(document.getElementById('delCustomer')?.value)||0;
-  const cp = (p.contractPrices||[]).find(x=>x.custId===custId);
+  const cp = (p.contractPrices||[]).find(x=>String(x.custId)===String(custId));
   const applyPrice = cp ? cp.price : p.price;
 
   // 共通セット（規格選択前に価格・税率をセット）
